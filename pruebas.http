@@ -1,0 +1,8 @@
+### Emitir Factura C a Consumidor Final
+POST http://localhost:8080/api/afip/emitir
+Content-Type: application/json
+
+{
+  "monto": 100.50,
+  "dniCliente": 0
+}

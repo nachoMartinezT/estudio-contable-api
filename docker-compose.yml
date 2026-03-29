@@ -1,0 +1,51 @@
+services:
+  # ☕ TU APLICACIÓN BACKEND
+  api:
+    build: .             # Busca el Dockerfile en la carpeta actual
+    container_name: guida-api
+    ports:
+      - "8080:8080"      # Expone el puerto al mundo exterior
+    depends_on:
+      - postgres
+      - mongo
+    environment:
+      # Usamos variables con valores por defecto (lo que está después de :- )
+      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-guida_contable}
+      SPRING_DATASOURCE_USERNAME: ${DB_USER:-guida_user}
+      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD} # <--- Sin valor por defecto, más seguro
+      SPRING_DATA_MONGODB_URI: mongodb://mongo:27017/${MONGO_DB:-guida_docs}
+
+      # Datos de AFIP (los que causaron la alerta)
+      AFIP_CERT_PASSWORD: ${AFIP_CERT_PASSWORD}
+      AFIP_CERT_PATH: /app/certs/certificado.p12
+
+      JAVA_OPTS: "-Xmx512m -Xms256m"
+    volumes:
+        # Mapeamos la carpeta de certificados de tu servidor de Miramar
+      - /home/nachomartinezdev/certs:/app/certs:ro
+
+  # 🐘 Base de datos SQL
+  postgres:
+    container_name: guida-postgres
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: guida_user
+      POSTGRES_PASSWORD: password123
+      POSTGRES_DB: guida_contable
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  # 🍃 Base de datos NoSQL
+  mongo:
+    container_name: guida-mongo
+    image: mongo:latest
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+volumes:
+  postgres_data:
+  mongo_data:
