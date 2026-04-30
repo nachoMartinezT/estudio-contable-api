@@ -1,8 +1,5 @@
 services:
 
-  # ==========================================
-  # 🚪 API GATEWAY (Spring Cloud Gateway)
-  # ==========================================
   api-gateway:
     build:
       context: .
@@ -20,9 +17,6 @@ services:
     environment:
       JAVA_OPTS: "-Xmx256m -Xms128m"
 
-  # ==========================================
-  # 🔐 AUTH SERVICE (Usuarios, Tenants, JWT)
-  # ==========================================
   auth-service:
     build:
       context: .
@@ -34,14 +28,11 @@ services:
       postgres:
         condition: service_started
     environment:
-      AUTH_DB_URL: jdbc:postgresql://postgres:5432/guida_auth
+      DB_URL: jdbc:postgresql://postgres:5432/guida_contable
       DB_USER: guida_user
       DB_PASSWORD: password123
       JAVA_OPTS: "-Xmx256m -Xms128m"
 
-  # ==========================================
-  # 👥 CLIENT SERVICE (Clientes CRUD)
-  # ==========================================
   client-service:
     build:
       context: .
@@ -53,14 +44,11 @@ services:
       postgres:
         condition: service_started
     environment:
-      CLIENT_DB_URL: jdbc:postgresql://postgres:5432/guida_clients
+      DB_URL: jdbc:postgresql://postgres:5432/guida_contable
       DB_USER: guida_user
       DB_PASSWORD: password123
       JAVA_OPTS: "-Xmx256m -Xms128m"
 
-  # ==========================================
-  # 🧾 INVOICE SERVICE (Facturas)
-  # ==========================================
   invoice-service:
     build:
       context: .
@@ -72,14 +60,11 @@ services:
       postgres:
         condition: service_started
     environment:
-      INVOICE_DB_URL: jdbc:postgresql://postgres:5432/guida_invoices
+      DB_URL: jdbc:postgresql://postgres:5432/guida_contable
       DB_USER: guida_user
       DB_PASSWORD: password123
       JAVA_OPTS: "-Xmx256m -Xms128m"
 
-  # ==========================================
-  # 🏛️ AFIP SERVICE (AFIP WS)
-  # ==========================================
   afip-service:
     build:
       context: .
@@ -91,7 +76,7 @@ services:
       postgres:
         condition: service_started
     environment:
-      AFIP_DB_URL: jdbc:postgresql://postgres:5432/guida_afip
+      DB_URL: jdbc:postgresql://postgres:5432/guida_contable
       DB_USER: guida_user
       DB_PASSWORD: password123
       AFIP_CERT_PASSWORD: ${AFIP_CERT_PASSWORD}
@@ -100,9 +85,6 @@ services:
     volumes:
       - /home/nachomartinezdev/certs:/app/certs:ro
 
-  # ==========================================
-  # 📋 AUDIT SERVICE (Auditoría en MongoDB)
-  # ==========================================
   audit-service:
     build:
       context: .
@@ -117,9 +99,6 @@ services:
       AUDIT_MONGO_URI: mongodb://mongo:27017/guida_audit
       JAVA_OPTS: "-Xmx256m -Xms128m"
 
-  # ==========================================
-  # 📊 DASHBOARD SERVICE (BFF - Agregación)
-  # ==========================================
   dashboard-service:
     build:
       context: .
@@ -137,25 +116,18 @@ services:
       SERVICES_AUDIT_SERVICE_URL: http://audit-service:8085
       JAVA_OPTS: "-Xmx256m -Xms128m"
 
-  # ==========================================
-  # 🐘 POSTGRESQL (Bases de datos por servicio)
-  # ==========================================
   postgres:
     container_name: guida-postgres
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: guida_user
       POSTGRES_PASSWORD: password123
-      POSTGRES_DB: guida_auth
+      POSTGRES_DB: guida_contable
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      - ./init-dbs.sh:/docker-entrypoint-initdb.d/init-dbs.sh:ro
 
-  # ==========================================
-  # 🍃 MONGODB
-  # ==========================================
   mongo:
     container_name: guida-mongo
     image: mongo:latest
