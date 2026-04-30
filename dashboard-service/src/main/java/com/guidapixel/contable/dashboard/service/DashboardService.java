@@ -26,13 +26,14 @@ public class DashboardService {
     @Value("${services.audit-service.url}")
     private String auditServiceUrl;
 
-    public DashboardResponse getDashboardData() {
+    public DashboardResponse getDashboardData(String authHeader) {
         Long tenantId = TenantContext.getTenantId();
 
         WebClient client = webClientBuilder.build();
 
         long totalClientes = client.get()
                 .uri(clientServiceUrl + "/api/v1/clients/count")
+                .header("Authorization", authHeader)
                 .header("X-Tenant-Id", String.valueOf(tenantId))
                 .retrieve()
                 .bodyToMono(Long.class)
@@ -41,6 +42,7 @@ public class DashboardService {
 
         BigDecimal totalFacturado = client.get()
                 .uri(invoiceServiceUrl + "/api/v1/invoices/total-facturado")
+                .header("Authorization", authHeader)
                 .header("X-Tenant-Id", String.valueOf(tenantId))
                 .retrieve()
                 .bodyToMono(BigDecimal.class)
@@ -49,6 +51,7 @@ public class DashboardService {
 
         List ultimosMovimientos = client.get()
                 .uri(auditServiceUrl + "/api/v1/audit/latest?tenantId=" + tenantId)
+                .header("Authorization", authHeader)
                 .retrieve()
                 .bodyToFlux(Map.class)
                 .collectList()
