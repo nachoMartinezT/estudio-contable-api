@@ -1,43 +1,160 @@
 services:
-  # ☕ TU APLICACIÓN BACKEND
-  api:
-    build: .             # Busca el Dockerfile en la carpeta actual
-    container_name: guida-api
-    ports:
-      - "8080:8080"      # Expone el puerto al mundo exterior
-    depends_on:
-      - postgres
-      - mongo
-    environment:
-      # Usamos variables con valores por defecto (lo que está después de :- )
-      SPRING_DATASOURCE_URL: jdbc:postgresql://postgres:5432/${DB_NAME:-guida_contable}
-      SPRING_DATASOURCE_USERNAME: ${DB_USER:-guida_user}
-      SPRING_DATASOURCE_PASSWORD: ${DB_PASSWORD} # <--- Sin valor por defecto, más seguro
-      SPRING_DATA_MONGODB_URI: mongodb://mongo:27017/${MONGO_DB:-guida_docs}
 
-      # Datos de AFIP (los que causaron la alerta)
+  # ==========================================
+  # 🚪 API GATEWAY (Spring Cloud Gateway)
+  # ==========================================
+  api-gateway:
+    build:
+      context: .
+      dockerfile: api-gateway/Dockerfile
+    container_name: guida-gateway
+    ports:
+      - "8080:8080"
+    depends_on:
+      - auth-service
+      - client-service
+      - invoice-service
+      - afip-service
+      - audit-service
+      - dashboard-service
+    environment:
+      JAVA_OPTS: "-Xmx256m -Xms128m"
+
+  # ==========================================
+  # 🔐 AUTH SERVICE (Usuarios, Tenants, JWT)
+  # ==========================================
+  auth-service:
+    build:
+      context: .
+      dockerfile: auth-service/Dockerfile
+    container_name: guida-auth
+    ports:
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_started
+    environment:
+      AUTH_DB_URL: jdbc:postgresql://postgres:5432/guida_auth
+      DB_USER: guida_user
+      DB_PASSWORD: password123
+      JAVA_OPTS: "-Xmx256m -Xms128m"
+
+  # ==========================================
+  # 👥 CLIENT SERVICE (Clientes CRUD)
+  # ==========================================
+  client-service:
+    build:
+      context: .
+      dockerfile: client-service/Dockerfile
+    container_name: guida-clients
+    ports:
+      - "8082:8082"
+    depends_on:
+      postgres:
+        condition: service_started
+    environment:
+      CLIENT_DB_URL: jdbc:postgresql://postgres:5432/guida_clients
+      DB_USER: guida_user
+      DB_PASSWORD: password123
+      JAVA_OPTS: "-Xmx256m -Xms128m"
+
+  # ==========================================
+  # 🧾 INVOICE SERVICE (Facturas)
+  # ==========================================
+  invoice-service:
+    build:
+      context: .
+      dockerfile: invoice-service/Dockerfile
+    container_name: guida-invoices
+    ports:
+      - "8083:8083"
+    depends_on:
+      postgres:
+        condition: service_started
+    environment:
+      INVOICE_DB_URL: jdbc:postgresql://postgres:5432/guida_invoices
+      DB_USER: guida_user
+      DB_PASSWORD: password123
+      JAVA_OPTS: "-Xmx256m -Xms128m"
+
+  # ==========================================
+  # 🏛️ AFIP SERVICE (AFIP WS)
+  # ==========================================
+  afip-service:
+    build:
+      context: .
+      dockerfile: afip-service/Dockerfile
+    container_name: guida-afip
+    ports:
+      - "8084:8084"
+    depends_on:
+      postgres:
+        condition: service_started
+    environment:
+      AFIP_DB_URL: jdbc:postgresql://postgres:5432/guida_afip
+      DB_USER: guida_user
+      DB_PASSWORD: password123
       AFIP_CERT_PASSWORD: ${AFIP_CERT_PASSWORD}
       AFIP_CERT_PATH: /app/certs/certificado.p12
-
-      JAVA_OPTS: "-Xmx512m -Xms256m"
+      JAVA_OPTS: "-Xmx256m -Xms128m"
     volumes:
-        # Mapeamos la carpeta de certificados de tu servidor de Miramar
       - /home/nachomartinezdev/certs:/app/certs:ro
 
-  # 🐘 Base de datos SQL
+  # ==========================================
+  # 📋 AUDIT SERVICE (Auditoría en MongoDB)
+  # ==========================================
+  audit-service:
+    build:
+      context: .
+      dockerfile: audit-service/Dockerfile
+    container_name: guida-audit
+    ports:
+      - "8085:8085"
+    depends_on:
+      mongo:
+        condition: service_started
+    environment:
+      AUDIT_MONGO_URI: mongodb://mongo:27017/guida_audit
+      JAVA_OPTS: "-Xmx256m -Xms128m"
+
+  # ==========================================
+  # 📊 DASHBOARD SERVICE (BFF - Agregación)
+  # ==========================================
+  dashboard-service:
+    build:
+      context: .
+      dockerfile: dashboard-service/Dockerfile
+    container_name: guida-dashboard
+    ports:
+      - "8086:8086"
+    depends_on:
+      - client-service
+      - invoice-service
+      - audit-service
+    environment:
+      SERVICES_CLIENT_SERVICE_URL: http://client-service:8082
+      SERVICES_INVOICE_SERVICE_URL: http://invoice-service:8083
+      SERVICES_AUDIT_SERVICE_URL: http://audit-service:8085
+      JAVA_OPTS: "-Xmx256m -Xms128m"
+
+  # ==========================================
+  # 🐘 POSTGRESQL (Bases de datos por servicio)
+  # ==========================================
   postgres:
     container_name: guida-postgres
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: guida_user
       POSTGRES_PASSWORD: password123
-      POSTGRES_DB: guida_contable
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      - ./init-dbs.sh:/docker-entrypoint-initdb.d/init-dbs.sh:ro
 
-  # 🍃 Base de datos NoSQL
+  # ==========================================
+  # 🍃 MONGODB
+  # ==========================================
   mongo:
     container_name: guida-mongo
     image: mongo:latest
