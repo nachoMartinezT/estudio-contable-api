@@ -35,6 +35,7 @@ build/
 ### Plaintext ###
 
 .env
+certs/
 *.p12
 *.key
 .idea/

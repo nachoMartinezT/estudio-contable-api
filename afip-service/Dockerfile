@@ -1,9 +1,15 @@
-FROM eclipse-temurin:21-jdk-alpine AS build
+FROM maven:3.9.9-eclipse-temurin-21 AS build
 WORKDIR /app
 COPY pom.xml .
 COPY shared shared/
+COPY api-gateway api-gateway/
+COPY auth-service auth-service/
+COPY client-service client-service/
+COPY invoice-service invoice-service/
 COPY afip-service afip-service/
-RUN apk add --no-cache maven && mvn -pl shared -am clean install -DskipTests -q && mvn -pl afip-service -am clean package -DskipTests -q
+COPY audit-service audit-service/
+COPY dashboard-service dashboard-service/
+RUN mvn -pl shared -am install -DskipTests -q && mvn -pl afip-service -am package -DskipTests -q
 
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app

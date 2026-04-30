@@ -5,10 +5,12 @@ import jakarta.persistence.PersistenceContext;
 import org.aspectj.lang.annotation.Aspect;
 import org.aspectj.lang.annotation.Before;
 import org.hibernate.Session;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.stereotype.Component;
 
 @Aspect
 @Component
+@ConditionalOnClass(name = "jakarta.persistence.EntityManager")
 public class TenantFilterAspect {
 
     @PersistenceContext

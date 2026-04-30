@@ -3,6 +3,8 @@ spring:
     name: api-gateway
 
   cloud:
+    compatibility-verifier:
+      enabled: false
     gateway:
       default-filters:
         - DedupeResponseHeader=Access-Control-Allow-Origin

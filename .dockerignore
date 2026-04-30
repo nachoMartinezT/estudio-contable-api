@@ -1,0 +1,13 @@
+.git/
+.gitignore
+.gitattributes
+target/
+certs/
+.env
+*.md
+.idea/
+.agents/
+.mvn/
+HELP.md
+pruebas.http
+skills-lock.json
