@@ -126,6 +126,26 @@ services:
       SERVICES_AUDIT_SERVICE_URL: http://audit-service:8085
       JAVA_OPTS: "-Xmx256m -Xms128m"
 
+  document-service:
+    build:
+      context: .
+      dockerfile: document-service/Dockerfile
+    container_name: guida-documents
+    restart: unless-stopped
+    ports:
+      - "8087:8087"
+    depends_on:
+      postgres:
+        condition: service_started
+    environment:
+      DB_URL: jdbc:postgresql://postgres:5432/guida_contable
+      DB_USER: guida_user
+      DB_PASSWORD: password123
+      DOCUMENT_STORAGE_PATH: /app/documents
+      JAVA_OPTS: "-Xmx256m -Xms128m"
+    volumes:
+      - document_data:/app/documents
+
   postgres:
     container_name: guida-postgres
     image: postgres:16-alpine
@@ -149,3 +169,4 @@ services:
 volumes:
   postgres_data:
   mongo_data:
+  document_data:

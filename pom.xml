@@ -26,6 +26,7 @@
         <module>afip-service</module>
         <module>audit-service</module>
         <module>dashboard-service</module>
+        <module>document-service</module>
     </modules>
 
     <properties>

@@ -22,7 +22,18 @@ public class JwtService {
     public String generateToken(UserDetails userDetails, Long tenantId) {
         Map<String, Object> extraClaims = new HashMap<>();
         extraClaims.put("tenantId", tenantId);
+
+        String role = userDetails.getAuthorities().stream()
+                .findFirst()
+                .map(GrantedAuthority::getAuthority)
+                .orElse("ROLE_CLIENT");
+        extraClaims.put("role", role);
+
         return buildToken(extraClaims, userDetails);
+    }
+
+    public String extractRole(String token) {
+        return extractClaim(token, claims -> claims.get("role", String.class));
     }
 
     private String buildToken(Map<String, Object> extraClaims, UserDetails userDetails) {

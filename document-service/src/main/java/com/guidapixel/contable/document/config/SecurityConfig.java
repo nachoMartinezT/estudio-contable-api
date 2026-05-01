@@ -1,4 +1,4 @@
-package com.guidapixel.contable.auth.config;
+package com.guidapixel.contable.document.config;
 
 import com.guidapixel.contable.shared.security.JwtAuthenticationFilter;
 import lombok.RequiredArgsConstructor;
@@ -30,8 +30,7 @@ public class SecurityConfig {
                 .csrf(AbstractHttpConfigurer::disable)
                 .cors(cors -> cors.configurationSource(corsConfigurationSource()))
                 .authorizeHttpRequests(auth -> auth
-                        .requestMatchers("/api/v1/auth/**", "/v3/api-docs/**", "/swagger-ui/**", "/swagger-ui.html").permitAll()
-                        .requestMatchers("/api/v1/admin/**").hasRole("SUPER_ADMIN")
+                        .requestMatchers("/api/v1/documents/**").authenticated()
                         .anyRequest().authenticated()
                 )
                 .sessionManagement(sess -> sess.sessionCreationPolicy(SessionCreationPolicy.STATELESS))

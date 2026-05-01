@@ -8,7 +8,8 @@ public enum Module {
     INVOICES("invoices", "/api/v1/invoices/**", "Facturacion interna"),
     AFIP("afip", "/api/afip/**", "Facturacion AFIP oficial"),
     AUDIT("audit", "/api/v1/audit/**", "Logs de auditoria"),
-    DASHBOARD("dashboard", "/api/v1/dashboard/**", "Dashboard y metricas");
+    DASHBOARD("dashboard", "/api/v1/dashboard/**", "Dashboard y metricas"),
+    DOCUMENTS("documents", "/api/v1/documents/**", "Gestion de documentos");
 
     private final String key;
     private final String pathPattern;

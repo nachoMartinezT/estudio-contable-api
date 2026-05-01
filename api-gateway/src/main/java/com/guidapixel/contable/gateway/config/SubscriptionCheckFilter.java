@@ -42,7 +42,8 @@ public class SubscriptionCheckFilter implements GlobalFilter, Ordered {
             "/api/v1/invoices/", "invoices",
             "/api/afip/", "afip",
             "/api/v1/audit/", "audit",
-            "/api/v1/dashboard/", "dashboard"
+            "/api/v1/dashboard/", "dashboard",
+            "/api/v1/documents/", "documents"
     );
 
     public SubscriptionCheckFilter(
@@ -69,7 +70,17 @@ public class SubscriptionCheckFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
-        Long tenantId = extractTenantId(authHeader.substring(7));
+        String jwt = authHeader.substring(7);
+        String role = extractRole(jwt);
+        Long tenantId = extractTenantId(jwt);
+
+        if (path.startsWith("/api/v1/admin/")) {
+            if (!"ROLE_SUPER_ADMIN".equals(role)) {
+                return denyAccessWithMessage(exchange, "Acceso denegado. Solo para administradores de Guida Pixel.");
+            }
+            return chain.filter(exchange);
+        }
+
         if (tenantId == null) {
             return chain.filter(exchange);
         }
@@ -150,6 +161,19 @@ public class SubscriptionCheckFilter implements GlobalFilter, Ordered {
         }
     }
 
+    private String extractRole(String jwt) {
+        try {
+            Claims claims = Jwts.parser()
+                    .verifyWith(jwtSigningKey)
+                    .build()
+                    .parseSignedClaims(jwt)
+                    .getPayload();
+            return claims.get("role", String.class);
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     private String getModuleForPath(String path) {
         for (Map.Entry<String, String> entry : ROUTE_TO_MODULE.entrySet()) {
             if (path.startsWith(entry.getKey())) {
@@ -167,9 +191,13 @@ public class SubscriptionCheckFilter implements GlobalFilter, Ordered {
     }
 
     private Mono<Void> denyAccess(ServerWebExchange exchange, String module) {
+        return denyAccessWithMessage(exchange, "Modulo '" + module + "' no habilitado. Contacta al administrador.");
+    }
+
+    private Mono<Void> denyAccessWithMessage(ServerWebExchange exchange, String message) {
         exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
         exchange.getResponse().getHeaders().setContentType(MediaType.APPLICATION_JSON);
-        String body = "{\"error\":\"Modulo '\" + module + \"' no habilitado. Contacta al administrador.\"}";
+        String body = "{\"error\":\"" + message + "\"}";
         DataBuffer buffer = exchange.getResponse().bufferFactory().wrap(body.getBytes(StandardCharsets.UTF_8));
         return exchange.getResponse().writeWith(Mono.just(buffer));
     }

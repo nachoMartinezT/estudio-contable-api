@@ -22,27 +22,40 @@ public class DataInitializer implements CommandLineRunner {
 
     @Override
     public void run(String... args) {
-        if (userRepository.count() == 0) {
-            log.info("No hay usuarios. Creando super-admin por defecto...");
+        crearSuperAdminSiNoExiste();
+    }
 
-            Tenant ownerTenant = Tenant.builder()
-                    .razonSocial("Guida Pixel SaaS")
-                    .cuit("30-00000000-0")
-                    .emailContacto("admin@guidapixel.com")
-                    .build();
-            tenantRepository.save(ownerTenant);
+    private void crearSuperAdminSiNoExiste() {
+        boolean existeSuperAdmin = userRepository.findAll().stream()
+                .anyMatch(u -> u.getRole() == Role.SUPER_ADMIN);
 
-            User superAdmin = User.builder()
-                    .nombre("Admin")
-                    .apellido("Guida Pixel")
-                    .email("admin@guidapixel.com")
-                    .password(passwordEncoder.encode("admin123"))
-                    .role(Role.SUPER_ADMIN)
-                    .build();
-            superAdmin.setTenantId(ownerTenant.getId());
-            userRepository.save(superAdmin);
-
-            log.info("Super-admin creado: admin@guidapixel.com / admin123");
+        if (existeSuperAdmin) {
+            log.info("Super-admin ya existe. Saltando inicializacion.");
+            return;
         }
+
+        log.info("No hay super-admin. Creando cuenta de Guida Pixel...");
+
+        Tenant ownerTenant = tenantRepository.findByCuit("30-00000000-0")
+                .orElseGet(() -> {
+                    Tenant tenant = Tenant.builder()
+                            .razonSocial("Guida Pixel SaaS")
+                            .cuit("30-00000000-0")
+                            .emailContacto("admin@guidapixel.com")
+                            .build();
+                    return tenantRepository.save(tenant);
+                });
+
+        User superAdmin = User.builder()
+                .nombre("Admin")
+                .apellido("Guida Pixel")
+                .email("admin@guidapixel.com")
+                .password(passwordEncoder.encode("admin123"))
+                .role(Role.SUPER_ADMIN)
+                .build();
+        superAdmin.setTenantId(ownerTenant.getId());
+        userRepository.save(superAdmin);
+
+        log.info("Super-admin creado: admin@guidapixel.com / admin123");
     }
 }

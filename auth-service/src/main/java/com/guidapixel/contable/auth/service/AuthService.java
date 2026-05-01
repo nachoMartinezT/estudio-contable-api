@@ -95,4 +95,22 @@ public class AuthService {
                 .token(jwtToken)
                 .build();
     }
+
+    public com.guidapixel.contable.auth.web.dto.UserProfileResponse getUserProfile(String email) {
+        var user = userRepository.findByEmail(email)
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
+
+        var tenant = tenantRepository.findById(user.getTenantId())
+                .orElse(null);
+
+        return com.guidapixel.contable.auth.web.dto.UserProfileResponse.builder()
+                .id(user.getId())
+                .nombre(user.getNombre())
+                .apellido(user.getApellido())
+                .email(user.getEmail())
+                .role(user.getRole())
+                .tenantId(user.getTenantId())
+                .tenantName(tenant != null ? tenant.getRazonSocial() : null)
+                .build();
+    }
 }
