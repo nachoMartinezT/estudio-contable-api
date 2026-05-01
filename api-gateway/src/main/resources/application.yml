@@ -14,7 +14,7 @@ spring:
         - id: auth-service
           uri: http://auth-service:8081
           predicates:
-            - Path=/api/v1/auth/**
+            - Path=/api/v1/auth/**,/api/v1/admin/**
         - id: client-service
           uri: http://client-service:8082
           predicates:
@@ -38,6 +38,13 @@ spring:
 
 server:
   port: 8080
+
+jwt:
+  secret: ${JWT_SECRET:ZGVmYXVsdFNlY3JldEtleUZvckRldmVsb3BtZW50UHVycG9zZXNPbmx5MTIzNDU2Nzg5MA==}
+
+services:
+  auth-service:
+    url: http://auth-service:8081
 
 logging:
   level:

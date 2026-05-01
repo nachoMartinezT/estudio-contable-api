@@ -17,6 +17,8 @@ services:
       - dashboard-service
     environment:
       JAVA_OPTS: "-Xmx256m -Xms128m"
+      JWT_SECRET: "ZGVmYXVsdFNlY3JldEtleUZvckRldmVsb3BtZW50UHVycG9zZXNPbmx5MTIzNDU2Nzg5MA=="
+      SERVICES_AUTH_SERVICE_URL: http://auth-service:8081
 
   auth-service:
     build:
