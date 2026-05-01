@@ -33,13 +33,14 @@ Sistema de gestion contable con emision de facturas electronicas oficiales ante 
 
 | Servicio | Puerto | Descripcion |
 |---|---|---|
-| **api-gateway** | 8080 | Punto de entrada unico, ruteo y CORS |
-| **auth-service** | 8081 | Registro, login, JWT, gestion de tenants |
+| **api-gateway** | 8080 | Punto de entrada unico, ruteo, CORS y filtro de subscripciones |
+| **auth-service** | 8081 | Registro, login, JWT, gestion de tenants y subscripciones |
 | **client-service** | 8082 | CRUD de clientes (razon social, CUIT, etc.) |
 | **invoice-service** | 8083 | Facturas internas + integracion con AFIP |
 | **afip-service** | 8084 | Comunicacion directa con webservices de AFIP |
 | **audit-service** | 8085 | Logs de auditoria en MongoDB |
 | **dashboard-service** | 8086 | Metricas y reportes consolidados |
+| **document-service** | 8087 | Gestion de documentos (upload/download) para tenants y clientes |
 
 ## Requisitos
 
@@ -239,6 +240,22 @@ Estos valores se usan si no se especifican en la peticion.
 |---|---|---|
 | POST | `/api/v1/auth/register` | Registrar nuevo usuario/estudio |
 | POST | `/api/v1/auth/login` | Login y obtener JWT |
+| GET | `/api/v1/auth/me` | Obtener perfil del usuario (rol, tenant, etc.) |
+
+### Documentos
+
+| Metodo | Endpoint | Descripcion |
+|---|---|---|
+| POST | `/api/v1/documents/upload` | Subir archivo (multipart) |
+| GET | `/api/v1/documents` | Listar documentos (filtra por rol) |
+| GET | `/api/v1/documents/{id}/download` | Descargar archivo |
+| DELETE | `/api/v1/documents/{id}` | Eliminar documento |
+
+Parametros de upload:
+- `file`: Archivo (max 50MB)
+- `category`: Categoria (declaraciones, facturas, recibos, certificados, notas, otros)
+- `description`: Descripcion opcional
+- `fromTenant`: `true` si lo sube el estudio, `false` si lo sube el cliente
 
 ### Clientes
 
@@ -358,6 +375,72 @@ curl -X PUT http://localhost:8080/api/v1/admin/tenants/6/subscription \
 6. La cache se refresca automaticamente cada 60 segundos
 ```
 
+## Jerarquia de Roles
+
+El sistema tiene 4 niveles de acceso:
+
+| Rol | Descripcion | Acceso |
+|---|---|---|
+| **SUPER_ADMIN** | Dueño de la plataforma (Guida Pixel) | Panel SaaS, todos los modulos |
+| **ADMIN** | Dueño del estudio contable | Todos los modulos habilitados por SaaS |
+| **STAFF** | Empleado del estudio | Modulos limitados por el ADMIN del estudio |
+| **CLIENT** | Cliente del estudio contable | Solo "Mi Cuenta" y "Documentos" |
+
+### Como funciona
+
+- **Guida Pixel** (SUPER_ADMIN) puede activar/desactivar modulos para cada estudio.
+- **Estudios contables** (ADMIN) pueden crear empleados (STAFF) con permisos limitados.
+- **Clientes** (CLIENT) acceden para ver su cuenta corriente, descargar documentos y subir archivos para su contador.
+
+### Credenciales por defecto
+
+- **Super-admin**: `admin@guidapixel.com` / `admin123`
+- Se crea automaticamente al iniciar el sistema por primera vez.
+
+## Gestion de Documentos
+
+El modulo de documentos permite el intercambio digital de archivos entre el estudio contable y sus clientes, eliminando la necesidad de reuniones presenciales.
+
+### Para el Estudio Contable (Tenant)
+
+1. Ir a **Documentos** en el menu lateral
+2. Click en **"📤 Subir Documento"**
+3. Seleccionar archivo (PDF, imagenes, Word, Excel - max 50MB)
+4. Elegir categoria:
+   - 📋 Declaraciones Juradas
+   - 🧾 Facturas
+   - 💰 Recibos de Sueldo
+   - 📜 Certificados
+   - 📝 Notas/Comunicaciones
+   - 📁 Otros
+5. Agregar descripcion (opcional)
+6. Click en **"Subir"**
+
+> Los documentos subidos por el estudio son visibles para el cliente correspondiente.
+
+### Para el Cliente del Estudio
+
+1. Ir a **Documentos** en el menu lateral
+2. Ver los documentos compartidos por el estudio
+3. Click en **"⬇️ Descargar"** para bajar cualquier archivo
+4. Tambien puede **subir archivos** para su contador (facturas, comprobantes, papeles de bienes, etc.)
+
+### Filtros y Categorias
+
+- Filtrar documentos por categoria usando los botones superiores
+- Ver cantidad de documentos por categoria
+- Iconos automaticos segun tipo de archivo (📄 PDF, 🖼️ Imagen, 📊 Excel, 📝 Word)
+
+## Mi Cuenta (Clientes)
+
+Los clientes del estudio tienen acceso a una pagina personalizada donde pueden:
+
+- Ver resumen de facturas pendientes y pagadas
+- Ver total de deuda con el estudio
+- Ver ultimos movimientos (honorarios, pagos, etc.)
+- Acceder a sus documentos compartidos por el estudio
+- Subir documentos para su contador
+
 ## Solucion de Problemas
 
 ### 503 Service Unavailable
@@ -391,13 +474,14 @@ Revisar el mensaje de error que devuelve AFIP. Causas comunes:
 
 ```
 contable-api/
-├── api-gateway/          # Spring Cloud Gateway
-├── auth-service/         # Autenticacion y tenants
+├── api-gateway/          # Spring Cloud Gateway + filtro de subscripciones
+├── auth-service/         # Autenticacion, tenants, subscripciones y roles
 ├── client-service/       # CRUD clientes
 ├── invoice-service/      # Facturas + integracion AFIP
 ├── afip-service/         # Comunicacion con webservices AFIP
 ├── audit-service/        # Auditoria (MongoDB)
 ├── dashboard-service/    # Metricas y reportes
+├── document-service/     # Gestion de documentos (upload/download)
 ├── shared/               # Libreria compartida (JWT, BaseEntity, etc.)
 ├── docker-compose.yml    # Orquestacion de servicios
 └── .env                  # Variables de entorno (no versionado)
@@ -406,8 +490,16 @@ guida-frontend/
 ├── src/
 │   ├── api/              # Axios configurado con JWT
 │   ├── components/       # Componentes reutilizables
-│   ├── layouts/          # Layouts de la app
+│   ├── context/          # AuthContext (gestion de sesion y roles)
+│   ├── layouts/          # Layouts de la app (menu segun rol)
 │   └── pages/            # Paginas principales
+│       ├── LoginPage.jsx
+│       ├── DashboardPage.jsx
+│       ├── ClientsPage.jsx
+│       ├── CreateInvoicePage.jsx
+│       ├── AdminDashboard.jsx      # Panel SaaS (solo SUPER_ADMIN)
+│       ├── DocumentManagementPage.jsx  # Gestion de documentos
+│       └── MiCuentaPage.jsx        # Vista de clientes
 └── package.json
 ```
 
@@ -416,8 +508,9 @@ guida-frontend/
 | Capa | Tecnologia |
 |---|---|
 | Backend | Java 21, Spring Boot 3.5, Spring Cloud Gateway |
-| Frontend | React 18, Vite, TailwindCSS, Axios |
+| Frontend | React 18, Vite, TailwindCSS, Axios, Context API |
 | Base de datos | PostgreSQL 16, MongoDB |
-| Auth | JWT (HS384), Spring Security |
+| Almacenamiento | Volumenes Docker para documentos |
+| Auth | JWT (HS384), Spring Security, roles jerarquicos |
 | Infra | Docker, Docker Compose |
 | AFIP | WSAA (autenticacion), WSFEv1 (facturacion) |
