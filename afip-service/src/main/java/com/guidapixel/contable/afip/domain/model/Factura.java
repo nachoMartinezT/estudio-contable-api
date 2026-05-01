@@ -1,47 +1,82 @@
 package com.guidapixel.contable.afip.domain.model;
 
+import com.guidapixel.contable.shared.model.BaseEntity;
 import jakarta.persistence.*;
+import lombok.*;
+
+import java.math.BigDecimal;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "facturas")
-public class Factura {
+@Table(name = "facturas_afip")
+@Data
+@Builder
+@NoArgsConstructor
+@AllArgsConstructor
+@EqualsAndHashCode(callSuper = true)
+public class Factura extends BaseEntity {
 
-    @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    // Identificaci\u00f3n del comprobante
+    @Column(nullable = false)
+    private Integer puntoVenta;
+
+    @Column(nullable = false)
+    private Integer tipoComprobante;
 
     @Column(nullable = false)
     private Integer nroComprobante;
 
-    @Column(nullable = false)
-    private Double monto;
+    // Datos del receptor
+    private Integer tipoDocumento;
+    private Long numeroDocumento;
+    private String nombreCliente;
+    private Integer condicionIvaReceptorId;
 
+    // Concepto y fechas
+    private Integer concepto;
+    private LocalDate fechaEmision;
+    private LocalDate fechaServicioDesde;
+    private LocalDate fechaServicioHasta;
+    private LocalDate fechaVencimientoPago;
+
+    // Importes
+    @Column(nullable = false, precision = 12, scale = 2)
+    private BigDecimal impTotal;
+
+    @Column(precision = 12, scale = 2)
+    private BigDecimal impTotConc;
+
+    @Column(precision = 12, scale = 2)
+    private BigDecimal impNeto;
+
+    @Column(precision = 12, scale = 2)
+    private BigDecimal impOpEx;
+
+    @Column(precision = 12, scale = 2)
+    private BigDecimal impTrib;
+
+    @Column(precision = 12, scale = 2)
+    private BigDecimal impIVA;
+
+    // Moneda
+    private String monedaId;
+    private BigDecimal monedaCotiz;
+
+    // Datos del emisor
+    @Column(nullable = false)
+    private String cuitEmisor;
+
+    // CAE y autorizaci\u00f3n
     @Column(nullable = false)
     private String cae;
 
     @Column(nullable = false)
-    private String vencimientoCae;
+    private LocalDate vencimientoCae;
 
-    private Long dniCliente;
+    private String resultado;
+    private String observaciones;
 
-    @Column(nullable = false)
-    private LocalDateTime fechaEmision;
-
-    public Factura() {}
-
-    public Long getId() { return id; }
-    public void setId(Long id) { this.id = id; }
-    public Integer getNroComprobante() { return nroComprobante; }
-    public void setNroComprobante(Integer nroComprobante) { this.nroComprobante = nroComprobante; }
-    public Double getMonto() { return monto; }
-    public void setMonto(Double monto) { this.monto = monto; }
-    public String getCae() { return cae; }
-    public void setCae(String cae) { this.cae = cae; }
-    public String getVencimientoCae() { return vencimientoCae; }
-    public void setVencimientoCae(String vencimientoCae) { this.vencimientoCae = vencimientoCae; }
-    public Long getDniCliente() { return dniCliente; }
-    public void setDniCliente(Long dniCliente) { this.dniCliente = dniCliente; }
-    public LocalDateTime getFechaEmision() { return fechaEmision; }
-    public void setFechaEmision(LocalDateTime fechaEmision) { this.fechaEmision = fechaEmision; }
+    // Relaci\u00f3n con factura interna (opcional)
+    private Long invoiceId;
 }

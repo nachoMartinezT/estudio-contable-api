@@ -5,6 +5,7 @@ services:
       context: .
       dockerfile: api-gateway/Dockerfile
     container_name: guida-gateway
+    restart: unless-stopped
     ports:
       - "8080:8080"
     depends_on:
@@ -22,6 +23,7 @@ services:
       context: .
       dockerfile: auth-service/Dockerfile
     container_name: guida-auth
+    restart: unless-stopped
     ports:
       - "8081:8081"
     depends_on:
@@ -38,6 +40,7 @@ services:
       context: .
       dockerfile: client-service/Dockerfile
     container_name: guida-clients
+    restart: unless-stopped
     ports:
       - "8082:8082"
     depends_on:
@@ -54,6 +57,7 @@ services:
       context: .
       dockerfile: invoice-service/Dockerfile
     container_name: guida-invoices
+    restart: unless-stopped
     ports:
       - "8083:8083"
     depends_on:
@@ -63,6 +67,7 @@ services:
       DB_URL: jdbc:postgresql://postgres:5432/guida_contable
       DB_USER: guida_user
       DB_PASSWORD: password123
+      AFIP_SERVICE_URL: http://afip-service:8084
       JAVA_OPTS: "-Xmx256m -Xms128m"
 
   afip-service:
@@ -70,6 +75,7 @@ services:
       context: .
       dockerfile: afip-service/Dockerfile
     container_name: guida-afip
+    restart: unless-stopped
     ports:
       - "8084:8084"
     depends_on:
@@ -90,6 +96,7 @@ services:
       context: .
       dockerfile: audit-service/Dockerfile
     container_name: guida-audit
+    restart: unless-stopped
     ports:
       - "8085:8085"
     depends_on:
@@ -104,6 +111,7 @@ services:
       context: .
       dockerfile: dashboard-service/Dockerfile
     container_name: guida-dashboard
+    restart: unless-stopped
     ports:
       - "8086:8086"
     depends_on:

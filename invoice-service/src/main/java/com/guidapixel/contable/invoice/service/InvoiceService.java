@@ -1,20 +1,26 @@
 package com.guidapixel.contable.invoice.service;
 
+import com.guidapixel.contable.invoice.client.AfipClient;
+import com.guidapixel.contable.invoice.client.AfipFacturaRequest;
 import com.guidapixel.contable.invoice.domain.model.Invoice;
 import com.guidapixel.contable.invoice.domain.model.InvoiceItem;
 import com.guidapixel.contable.invoice.domain.repository.InvoiceRepository;
 import com.guidapixel.contable.invoice.web.dto.InvoiceRequest;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.Map;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class InvoiceService {
 
     private final InvoiceRepository invoiceRepository;
+    private final AfipClient afipClient;
 
     @Transactional
     public Invoice createInvoice(InvoiceRequest request) {
@@ -22,6 +28,8 @@ public class InvoiceService {
                 .numeroFactura(request.getNumeroFactura())
                 .fechaEmision(request.getFechaEmision())
                 .clientId(request.getClientId())
+                .tipoComprobante(request.getTipoComprobante())
+                .puntoVenta(request.getPuntoVenta())
                 .build();
 
         BigDecimal totalFactura = BigDecimal.ZERO;
@@ -42,6 +50,57 @@ public class InvoiceService {
 
         invoice.setTotal(totalFactura);
 
+        if (request.isEmitirAfip()) {
+            emitirEnAfip(invoice, request);
+        }
+
         return invoiceRepository.save(invoice);
+    }
+
+    private void emitirEnAfip(Invoice invoice, InvoiceRequest request) {
+        log.info("Emitiendo factura en AFIP para invoice {}", invoice.getId());
+
+        AfipFacturaRequest afipRequest = AfipFacturaRequest.builder()
+                .puntoVenta(request.getPuntoVenta())
+                .tipoComprobante(request.getTipoComprobante())
+                .tipoDocumento(request.getTipoDocumento())
+                .numeroDocumento(request.getNumeroDocumento())
+                .nombreCliente(request.getNombreCliente())
+                .condicionIvaReceptorId(request.getCondicionIvaReceptorId())
+                .concepto(request.getConcepto())
+                .fechaEmision(request.getFechaEmision())
+                .fechaServicioDesde(request.getFechaServicioDesde())
+                .fechaServicioHasta(request.getFechaServicioHasta())
+                .fechaVencimientoPago(request.getFechaVencimientoPago())
+                .impTotal(invoice.getTotal())
+                .impTotConc(request.getImpTotConc())
+                .impNeto(invoice.getTotal())
+                .impOpEx(request.getImpOpEx())
+                .impTrib(request.getImpTrib())
+                .impIVA(request.getImpIVA())
+                .monedaId(request.getMonedaId())
+                .monedaCotiz(request.getMonedaCotiz())
+                .cuitEmisor(request.getCuitEmisor())
+                .items(request.getItems().stream()
+                        .map(item -> AfipFacturaRequest.AfipItemRequest.builder()
+                                .concepto(item.getConcepto())
+                                .cantidad(item.getCantidad())
+                                .precioUnitario(item.getPrecioUnitario())
+                                .build())
+                        .toList())
+                .build();
+
+        Map<String, Object> resultado = afipClient.emitirFactura(afipRequest);
+
+        invoice.setCae((String) resultado.get("cae"));
+        invoice.setVencimientoCae(java.time.LocalDate.parse((String) resultado.get("vencimiento_cae")));
+        invoice.setNroComprobanteAfip(Integer.parseInt((String) resultado.get("numero_comprobante")));
+        invoice.setEstadoAfip((String) resultado.get("estado"));
+        invoice.setNumeroFactura(String.format("%04d-%08d",
+                invoice.getPuntoVenta(),
+                invoice.getNroComprobanteAfip()));
+
+        log.info("Factura emitida en AFIP exitosamente. CAE: {}, Nro: {}",
+                invoice.getCae(), invoice.getNumeroFactura());
     }
 }

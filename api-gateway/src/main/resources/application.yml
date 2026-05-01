@@ -6,6 +6,8 @@ spring:
     compatibility-verifier:
       enabled: false
     gateway:
+      loadbalancer:
+        enabled: false
       default-filters:
         - DedupeResponseHeader=Access-Control-Allow-Origin
       routes:
@@ -36,3 +38,8 @@ spring:
 
 server:
   port: 8080
+
+logging:
+  level:
+    org.springframework.cloud.gateway: DEBUG
+    reactor.netty: DEBUG
