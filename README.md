@@ -291,6 +291,73 @@ curl -X POST http://localhost:8080/api/v1/invoices \
   }'
 ```
 
+## Administracion SaaS (Owner)
+
+Como dueno de la plataforma, tenes un panel de administracion para gestionar los estudios contables (tenants) y los modulos que cada uno tiene habilitados.
+
+### Acceso al Panel de Administracion
+
+1. El super-admin se crea automaticamente al iniciar el sistema por primera vez:
+   - **Email**: `admin@guidapixel.com`
+   - **Password**: `admin123`
+
+2. Ir a http://localhost:5173 e iniciar sesion con las credenciales de arriba.
+
+3. Click en **"Administracion SaaS"** en el menu lateral.
+
+### Gestion de Modulos por Tenant
+
+Cada estudio contable puede tener habilitados o deshabilitados los siguientes modulos:
+
+| Modulo | Descripcion | Path |
+|---|---|---|
+| **Clientes** | Gestion de clientes | `/api/v1/clients/**` |
+| **Facturacion** | Facturas internas | `/api/v1/invoices/**` |
+| **AFIP** | Facturacion oficial | `/api/afip/**` |
+| **Auditoria** | Logs de auditoria | `/api/v1/audit/**` |
+| **Dashboard** | Metricas y reportes | `/api/v1/dashboard/**` |
+
+Cuando desactivas un modulo para un tenant:
+- El tenant recibe un error **403 Forbidden** al intentar acceder
+- El cambio es inmediato (el gateway cachea las subscripciones por 60 segundos)
+
+### Panel de Estadisticas
+
+El dashboard muestra:
+- **Total Estudios**: Cantidad de tenants registrados
+- **Total Usuarios**: Cantidad de usuarios en el sistema
+- **Subscripciones Activas**: Total de modulos habilitados
+- **Modulos Disponibles**: Cantidad de modulos en la plataforma
+
+### API de Administracion
+
+| Metodo | Endpoint | Descripcion |
+|---|---|---|
+| GET | `/api/v1/admin/dashboard` | Estadisticas generales |
+| GET | `/api/v1/admin/tenants` | Listar todos los tenants |
+| GET | `/api/v1/admin/tenants/{id}` | Detalle de tenant con subscripciones |
+| PUT | `/api/v1/admin/tenants/{id}/subscription` | Activar/desactivar un modulo |
+| PUT | `/api/v1/admin/tenants/{id}/subscriptions` | Actualizar todos los modulos |
+
+Ejemplo - Desactivar modulo AFIP para un tenant:
+
+```bash
+curl -X PUT http://localhost:8080/api/v1/admin/tenants/6/subscription \
+  -H "Content-Type: application/json" \
+  -d '{"moduleName":"afip","active":false}'
+```
+
+### Como funciona la verificacion de modulos
+
+```
+1. El tenant hace una peticion al gateway
+2. El SubscriptionCheckFilter extrae el tenantId del JWT
+3. Busca en cache los modulos habilitados para ese tenant
+4. Si el modulo esta habilitado -> pasa la peticion
+5. Si no esta habilitado -> devuelve 403 Forbidden
+6. La cache se refresca automaticamente cada 60 segundos
+```
+
 ## Solucion de Problemas
 
 ### 503 Service Unavailable
