@@ -26,10 +26,13 @@ public class DocumentController {
             @RequestParam("file") MultipartFile file,
             @RequestParam("category") String category,
             @RequestParam(value = "description", required = false) String description,
-            @RequestParam(value = "fromTenant", defaultValue = "true") boolean fromTenant
+            @RequestParam(value = "clientId", required = false) Long clientId,
+            @RequestParam(value = "clientEmail", required = false) String clientEmail,
+            @RequestParam(value = "clientName", required = false) String clientName,
+            @RequestParam(value = "tenantName", required = false) String tenantName
     ) {
         try {
-            Document document = documentService.uploadDocument(file, category, description, fromTenant);
+            Document document = documentService.uploadDocument(file, category, description, clientId, clientEmail, clientName, tenantName);
             return ResponseEntity.ok(Map.of(
                     "status", "EXITO",
                     "document", Map.of(

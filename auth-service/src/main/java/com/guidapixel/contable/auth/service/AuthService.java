@@ -31,6 +31,7 @@ public class AuthService {
     private final SubscriptionRepository subscriptionRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtService jwtService;
+    private final AdminService adminService;
     private final AuthenticationManager authenticationManager;
 
     @Transactional
@@ -69,7 +70,8 @@ public class AuthService {
                 Module.INVOICES,
                 Module.AFIP,
                 Module.AUDIT,
-                Module.DASHBOARD
+                Module.DASHBOARD,
+                Module.DOCUMENTS
         );
 
         for (Module modulo : modulosDefault) {
@@ -89,7 +91,12 @@ public class AuthService {
         var user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow();
 
-        var jwtToken = jwtService.generateToken(user, user.getTenantId());
+        List<String> permissions = null;
+        if (user.getRole() == Role.STAFF) {
+            permissions = adminService.getStaffPermissions(user.getId());
+        }
+
+        var jwtToken = jwtService.generateToken(user, user.getTenantId(), permissions);
 
         return AuthenticationResponse.builder()
                 .token(jwtToken)
@@ -111,6 +118,7 @@ public class AuthService {
                 .role(user.getRole())
                 .tenantId(user.getTenantId())
                 .tenantName(tenant != null ? tenant.getRazonSocial() : null)
+                .clientId(user.getClientId())
                 .build();
     }
 }

@@ -34,7 +34,7 @@ Sistema de gestion contable con emision de facturas electronicas oficiales ante 
 | Servicio | Puerto | Descripcion |
 |---|---|---|
 | **api-gateway** | 8080 | Punto de entrada unico, ruteo, CORS y filtro de subscripciones |
-| **auth-service** | 8081 | Registro, login, JWT, gestion de tenants y subscripciones |
+| **auth-service** | 8081 | Login, JWT, gestion de tenants, subscripciones y permisos |
 | **client-service** | 8082 | CRUD de clientes (razon social, CUIT, etc.) |
 | **invoice-service** | 8083 | Facturas internas + integracion con AFIP |
 | **afip-service** | 8084 | Comunicacion directa con webservices de AFIP |
@@ -55,28 +55,18 @@ Sistema de gestion contable con emision de facturas electronicas oficiales ante 
 Crear archivo `.env` en la raiz del proyecto:
 
 ```env
-AFIP_CERT_PASSWORD=tu_password_del_certificado
+# URLs de AFIP (homologacion por defecto)
+AFIP_WSAA_URL=https://wsaahomo.afip.gov.ar/ws/services/LoginCms
+AFIP_WSFE_URL=https://wswhomo.afip.gov.ar/wsfev1/service.asmx
+
+# Clave para encriptar passwords de certificados AFIP
+AFIP_ENCRYPTION_KEY=GuidaContable2026SecureKey!
+
+# API Key para comunicacion interna entre microservicios
+INTERNAL_API_KEY=Int3rnalK3yGu1da2026S3gur0!
 ```
 
-> El password es el del archivo `.p12` que descargaste de AFIP.
-
-### 2. Colocar el certificado AFIP
-
-El certificado debe estar en la ruta configurada en `docker-compose.yml`:
-
-```yaml
-volumes:
-  - /ruta/a/tus/certs:/app/certs:ro
-```
-
-Por defecto apunta a `/home/nachomartinezdev/certs` (Linux). En Windows, modifica el volumen en `docker-compose.yml`:
-
-```yaml
-volumes:
-  - C:/ruta/a/tus/certs:/app/certs:ro
-```
-
-### 3. Levantar los servicios
+### 2. Levantar los servicios
 
 ```bash
 docker compose up -d --build
@@ -88,7 +78,7 @@ Esperar ~60 segundos a que todos los servicios inicien. Verificar:
 docker compose ps
 ```
 
-### 4. Iniciar el frontend
+### 3. Iniciar el frontend
 
 ```bash
 cd ../guida-frontend
@@ -100,18 +90,16 @@ Abrir http://localhost:5173
 
 ## Manual de Uso
 
-### Registro de Usuario
+### Acceso al Sistema
 
-1. Abrir http://localhost:5173
-2. Click en **"Registrarse"**
-3. Completar:
-   - **Nombre del Estudio**: Nombre de tu estudio contable
-   - **CUIT del Estudio**: CUIT con formato `XX-XXXXXXXX-X`
-   - **Tu Nombre y Apellido**
-   - **Email y Contrasena**
-4. Click en **"Crear cuenta e ingresar"**
+El sistema no tiene registro publico. Los estudios contables (tenants) son creados exclusivamente por el administrador de la plataforma (Guida Pixel) desde el panel de administracion SaaS.
 
-> El sistema crea automaticamente un **Tenant** (estudio) y un usuario **ADMIN** asociado.
+1. El administrador de la plataforma crea el estudio desde **Administracion SaaS** > **+ Nuevo Estudio**
+2. Se generan credenciales automaticas con una password temporal
+3. El administrador del estudio recibe su email y password temporal para ingresar
+4. Al primer inicio de sesion, el administrador del estudio puede crear empleados (STAFF) y configurar sus permisos
+
+> Para solicitar acceso a la plataforma, contactar a Guida Pixel.
 
 ### Agregar Clientes
 
@@ -220,17 +208,19 @@ AFIP_WSFE_URL=https://servicios1.afip.gov.ar/wsfev1/service.asmx
 
 Tambien necesitas un certificado de **produccion** (no el de homologacion).
 
-### Configuracion por defecto
+### Configuracion AFIP por Tenant
 
-Se pueden definir valores por defecto para la emision de facturas:
+Cada estudio contable tiene su propio CUIT emisor y certificado AFIP. La configuracion se realiza desde el panel de administracion SaaS:
 
-```env
-AFIP_CUIT_EMISOR=20325847094
-AFIP_PUNTO_VENTA=1
-AFIP_TIPO_COMPROBANTE=11
-```
+1. Seleccionar el estudio en la lista de tenants
+2. Ir a la pestaña **Configuracion AFIP**
+3. **Subir el certificado .p12** obtenido de AFIP para ese estudio
+4. Configurar el **CUIT Emisor AFIP** (el CUIT del estudio que factura)
+5. Ingresar la **password del certificado** (se guarda encriptada)
+6. Seleccionar **homologacion** (prueba) o desmarcar para **produccion**
+7. Click en **Guardar Configuracion AFIP**
 
-Estos valores se usan si no se especifican en la peticion.
+> Los certificados se almacenan en un volumen Docker compartido (`afip_certs`) y cada tenant tiene su propio archivo `{tenantId}.p12`. La password del certificado se encripta con AES antes de guardarse en la base de datos.
 
 ## Endpoints de la API
 
@@ -238,7 +228,6 @@ Estos valores se usan si no se especifican en la peticion.
 
 | Metodo | Endpoint | Descripcion |
 |---|---|---|
-| POST | `/api/v1/auth/register` | Registrar nuevo usuario/estudio |
 | POST | `/api/v1/auth/login` | Login y obtener JWT |
 | GET | `/api/v1/auth/me` | Obtener perfil del usuario (rol, tenant, etc.) |
 
@@ -255,7 +244,8 @@ Parametros de upload:
 - `file`: Archivo (max 50MB)
 - `category`: Categoria (declaraciones, facturas, recibos, certificados, notas, otros)
 - `description`: Descripcion opcional
-- `fromTenant`: `true` si lo sube el estudio, `false` si lo sube el cliente
+
+> El sistema determina automaticamente si el documento fue subido por el estudio (`fromTenant=true`) o por el cliente (`fromTenant=false`) segun el rol del usuario autenticado en el JWT.
 
 ### Clientes
 
@@ -322,7 +312,36 @@ Como dueno de la plataforma, tenes un panel de administracion para gestionar los
 
 3. Click en **"Administracion SaaS"** en el menu lateral.
 
-### Gestion de Modulos por Tenant
+### Panel de Administracion SaaS
+
+Como dueno de la plataforma, tenes un panel de administracion para gestionar los estudios contables (tenants), sus modulos y su configuracion AFIP.
+
+#### Crear un Nuevo Estudio
+
+1. Click en **"+ Nuevo Estudio"**
+2. Completar:
+   - **Nombre del Estudio**: Razon social del estudio contable
+   - **CUIT del Estudio**: CUIT con formato `XX-XXXXXXXX-X`
+   - **Nombre y Apellido del Admin**: Datos del responsable del estudio
+   - **Email del Admin**: Email que usara para iniciar sesion
+3. Click en **"Crear Estudio"**
+4. El sistema genera una **password temporal** que debe compartirse con el administrador del estudio
+
+#### Configuracion AFIP por Tenant
+
+Cada estudio necesita su propio certificado AFIP para emitir facturas oficiales:
+
+1. Seleccionar el estudio en la lista
+2. Ir a la pestaña **Configuracion AFIP**
+3. **Subir el certificado .p12** del estudio
+4. Configurar el **CUIT Emisor AFIP** (el CUIT con el que factura el estudio)
+5. Ingresar la **password del certificado** (se guarda encriptada con AES)
+6. Seleccionar **homologacion** (prueba) o desmarcar para **produccion**
+7. Click en **"Guardar Configuracion AFIP"**
+
+> Los certificados se almacenan en un volumen Docker (`afip_certs`) con la ruta `/app/certs/{tenantId}.p12`. Cada tenant tiene su propio certificado independiente.
+
+#### Gestion de Modulos por Tenant
 
 Cada estudio contable puede tener habilitados o deshabilitados los siguientes modulos:
 
@@ -382,20 +401,52 @@ El sistema tiene 4 niveles de acceso:
 | Rol | Descripcion | Acceso |
 |---|---|---|
 | **SUPER_ADMIN** | Dueño de la plataforma (Guida Pixel) | Panel SaaS, todos los modulos |
-| **ADMIN** | Dueño del estudio contable | Todos los modulos habilitados por SaaS |
-| **STAFF** | Empleado del estudio | Modulos limitados por el ADMIN del estudio |
+| **ADMIN** | Dueño del estudio contable | Todos los modulos habilitados por SaaS, gestion de empleados |
+| **STAFF** | Empleado del estudio | Permisos granulares configurados por el ADMIN |
 | **CLIENT** | Cliente del estudio contable | Solo "Mi Cuenta" y "Documentos" |
 
 ### Como funciona
 
-- **Guida Pixel** (SUPER_ADMIN) puede activar/desactivar modulos para cada estudio.
-- **Estudios contables** (ADMIN) pueden crear empleados (STAFF) con permisos limitados.
+- **Guida Pixel** (SUPER_ADMIN) crea estudios, activa/desactiva modulos y configura AFIP por tenant.
+- **Estudios contables** (ADMIN) pueden crear empleados (STAFF) y definir permisos granulares para cada uno.
 - **Clientes** (CLIENT) acceden para ver su cuenta corriente, descargar documentos y subir archivos para su contador.
 
 ### Credenciales por defecto
 
 - **Super-admin**: `admin@guidapixel.com` / `admin123`
 - Se crea automaticamente al iniciar el sistema por primera vez.
+
+## Gestion de Empleados (Permisos STAFF)
+
+El administrador del estudio (ADMIN) puede crear empleados con acceso limitado al sistema. Cada empleado tiene permisos individuales que el ADMIN puede configurar.
+
+### Crear un Empleado
+
+1. Ir a **Empleados** en el menu lateral (visible solo para ADMIN)
+2. Click en **"+ Nuevo Empleado"**
+3. Completar nombre, apellido y email
+4. Click en **"Crear Empleado"**
+5. El sistema genera una **password temporal** que debe compartirse con el empleado
+
+> Al crear un empleado, se le asignan permisos por defecto: puede gestionar clientes y documentos, pero no puede ver facturas, dashboard ni gestionar otros empleados.
+
+### Configurar Permisos
+
+1. Seleccionar un empleado de la lista
+2. Activar o desactivar cada permiso usando los toggles:
+
+| Permiso | Descripcion | Default |
+|---|---|---|
+| **Gestionar Clientes** | Acceso al modulo de clientes | ✅ Habilitado |
+| **Ver Facturas** | Puede ver facturas internas | ❌ Deshabilitado |
+| **Crear Facturas** | Puede crear y emitir facturas | ❌ Deshabilitado |
+| **Gestionar Documentos** | Acceso al modulo de documentos | ✅ Habilitado |
+| **Ver Dashboard** | Puede ver metricas y reportes | ❌ Deshabilitado |
+| **Gestionar Empleados** | Puede gestionar permisos de otros empleados | ❌ Deshabilitado |
+
+3. Click en **"Guardar Permisos"**
+
+> Los permisos se incluyen en el JWT del usuario al iniciar sesion. El API Gateway valida los permisos en cada request. Si un empleado intenta acceder a un modulo sin permiso, recibe un error 403 con un mensaje claro.
 
 ## Gestion de Documentos
 
@@ -454,13 +505,14 @@ docker compose ps
 
 ### Error de certificado AFIP
 
-- Verificar que el archivo `.p12` existe en la ruta del volumen
-- Verificar que `AFIP_CERT_PASSWORD` es correcto
+- Verificar que el certificado .p12 fue subido correctamente desde el panel de administracion SaaS
+- Verificar que la password del certificado es correcta
 - Verificar que el certificado no esta vencido
+- Verificar que el CUIT emisor AFIP esta configurado para el tenant
 
 ### Error "CUIT ya existe"
 
-El CUIT del estudio debe ser unico. Si ya te registraste, usa login en lugar de registro.
+El CUIT del estudio debe ser unico. Si el estudio ya fue creado, contacta al administrador de la plataforma para obtener acceso.
 
 ### Error "AFIP rechazo la factura"
 
@@ -498,6 +550,7 @@ guida-frontend/
 │       ├── ClientsPage.jsx
 │       ├── CreateInvoicePage.jsx
 │       ├── AdminDashboard.jsx      # Panel SaaS (solo SUPER_ADMIN)
+│       ├── StaffManagementPage.jsx     # Gestion de empleados (solo ADMIN)
 │       ├── DocumentManagementPage.jsx  # Gestion de documentos
 │       └── MiCuentaPage.jsx        # Vista de clientes
 └── package.json
@@ -510,7 +563,7 @@ guida-frontend/
 | Backend | Java 21, Spring Boot 3.5, Spring Cloud Gateway |
 | Frontend | React 18, Vite, TailwindCSS, Axios, Context API |
 | Base de datos | PostgreSQL 16, MongoDB |
-| Almacenamiento | Volumenes Docker para documentos |
+| Almacenamiento | Volumenes Docker (dev) — se recomienda MinIO para produccion |
 | Auth | JWT (HS384), Spring Security, roles jerarquicos |
 | Infra | Docker, Docker Compose |
 | AFIP | WSAA (autenticacion), WSFEv1 (facturacion) |

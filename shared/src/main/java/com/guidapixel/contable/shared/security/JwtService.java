@@ -5,12 +5,14 @@ import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.io.Decoders;
 import io.jsonwebtoken.security.Keys;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.userdetails.UserDetails;
 import org.springframework.stereotype.Service;
 
 import javax.crypto.SecretKey;
 import java.util.Date;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.function.Function;
 
@@ -20,6 +22,10 @@ public class JwtService {
     private static final String SECRET_KEY = "Est0EsUnaClav3MuyS3gur4ParaGu1daC0ntabl3Api2026!!!";
 
     public String generateToken(UserDetails userDetails, Long tenantId) {
+        return generateToken(userDetails, tenantId, null);
+    }
+
+    public String generateToken(UserDetails userDetails, Long tenantId, List<String> permissions) {
         Map<String, Object> extraClaims = new HashMap<>();
         extraClaims.put("tenantId", tenantId);
 
@@ -29,7 +35,23 @@ public class JwtService {
                 .orElse("ROLE_CLIENT");
         extraClaims.put("role", role);
 
+        if (permissions != null && !permissions.isEmpty()) {
+            extraClaims.put("perms", permissions);
+        } else if ("ROLE_ADMIN".equals(role) || "ROLE_SUPER_ADMIN".equals(role)) {
+            extraClaims.put("perms", List.of("ALL"));
+        }
+
         return buildToken(extraClaims, userDetails);
+    }
+
+    public List<String> extractPermissions(String token) {
+        return extractClaim(token, claims -> {
+            Object perms = claims.get("perms");
+            if (perms instanceof List) {
+                return (List<String>) perms;
+            }
+            return List.<String>of();
+        });
     }
 
     public String extractRole(String token) {

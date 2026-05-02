@@ -4,7 +4,6 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import org.springframework.web.reactive.function.client.WebClient;
-import reactor.core.publisher.Mono;
 
 import java.util.Map;
 
@@ -21,46 +20,53 @@ public class AfipClient {
     }
 
     @SuppressWarnings("unchecked")
-    public Map<String, Object> emitirFactura(AfipFacturaRequest request) {
+    public Map<String, Object> emitirFactura(AfipFacturaRequest request, Long tenantId) {
         try {
+            FacturaEmitirPayload payload = FacturaEmitirPayload.builder()
+                    .tenantId(tenantId)
+                    .factura(request)
+                    .build();
+
             Map<String, Object> response = webClient.post()
                     .uri("/api/afip/emitir")
-                    .bodyValue(request)
+                    .bodyValue(payload)
                     .retrieve()
                     .bodyToMono(Map.class)
                     .block();
 
             if (response != null && "ERROR".equals(response.get("status"))) {
-                throw new RuntimeException("AFIP rechaz\u00f3 la factura: " + response.get("mensaje"));
+                throw new RuntimeException("AFIP rechazo la factura: " + response.get("mensaje"));
             }
 
             return (Map<String, Object>) response.get("datos_factura");
         } catch (Exception e) {
-            log.error("Error comunic\u00e1ndose con AFIP service: {}", e.getMessage());
+            log.error("Error comunicandose con AFIP service: {}", e.getMessage());
             throw new RuntimeException("Error al emitir factura en AFIP: " + e.getMessage(), e);
         }
     }
 
-    public String consultarUltimoComprobante(Integer puntoVenta, Integer tipoComprobante) {
+    @SuppressWarnings("unchecked")
+    public String consultarUltimoComprobante(Integer puntoVenta, Integer tipoComprobante, Long tenantId) {
         try {
-            Map<String, String> response = webClient.get()
+            Map<String, Object> response = webClient.post()
                     .uri(uriBuilder -> uriBuilder
                             .path("/api/afip/ultimo-comprobante")
                             .queryParam("puntoVenta", puntoVenta)
                             .queryParam("tipoComprobante", tipoComprobante)
                             .build())
+                    .bodyValue(Map.of("tenantId", tenantId))
                     .retrieve()
                     .bodyToMono(Map.class)
                     .block();
 
             if (response != null && "ERROR".equals(response.get("status"))) {
-                throw new RuntimeException("Error consultando \u00faltimo comprobante: " + response.get("error"));
+                throw new RuntimeException("Error consultando ultimo comprobante: " + response.get("error"));
             }
 
-            return response != null ? response.get("ultimo_comprobante") : "0";
+            return response != null ? response.get("ultimo_comprobante").toString() : "0";
         } catch (Exception e) {
-            log.error("Error consultando \u00faltimo comprobante: {}", e.getMessage());
-            throw new RuntimeException("Error consultando \u00faltimo comprobante en AFIP: " + e.getMessage(), e);
+            log.error("Error consultando ultimo comprobante: {}", e.getMessage());
+            throw new RuntimeException("Error consultando ultimo comprobante en AFIP: " + e.getMessage(), e);
         }
     }
 }

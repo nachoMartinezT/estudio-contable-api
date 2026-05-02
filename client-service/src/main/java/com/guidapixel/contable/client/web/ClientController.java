@@ -2,6 +2,7 @@ package com.guidapixel.contable.client.web;
 
 import com.guidapixel.contable.client.domain.model.Client;
 import com.guidapixel.contable.client.domain.repository.ClientRepository;
+import com.guidapixel.contable.client.service.ClientService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -14,10 +15,11 @@ import java.util.List;
 public class ClientController {
 
     private final ClientRepository clientRepository;
+    private final ClientService clientService;
 
     @PostMapping
     public ResponseEntity<Client> createClient(@RequestBody Client client) {
-        return ResponseEntity.ok(clientRepository.save(client));
+        return ResponseEntity.ok(clientService.createClient(client));
     }
 
     @GetMapping

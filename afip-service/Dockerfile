@@ -9,6 +9,7 @@ COPY invoice-service invoice-service/
 COPY afip-service afip-service/
 COPY audit-service audit-service/
 COPY dashboard-service dashboard-service/
+COPY document-service document-service/
 RUN mvn -pl shared -am install -DskipTests -q && mvn -pl afip-service -am package -DskipTests -q
 
 FROM eclipse-temurin:21-jre-alpine

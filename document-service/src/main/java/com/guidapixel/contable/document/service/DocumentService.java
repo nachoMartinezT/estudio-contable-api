@@ -1,13 +1,17 @@
 package com.guidapixel.contable.document.service;
 
+import com.guidapixel.contable.document.client.NotificationClient;
 import com.guidapixel.contable.document.domain.model.Document;
 import com.guidapixel.contable.document.domain.repository.DocumentRepository;
 import com.guidapixel.contable.shared.multitenancy.TenantContext;
+import com.guidapixel.contable.shared.security.JwtService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.context.request.RequestContextHolder;
+import org.springframework.web.context.request.ServletRequestAttributes;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
@@ -23,16 +27,23 @@ import java.util.UUID;
 public class DocumentService {
 
     private final DocumentRepository documentRepository;
+    private final JwtService jwtService;
+    private final NotificationClient notificationClient;
 
     @Value("${document.storage.path:/app/documents}")
     private String storagePath;
 
+    @Value("${app.base-url:http://localhost:5173}")
+    private String appBaseUrl;
+
     @Transactional
-    public Document uploadDocument(MultipartFile file, String category, String description, boolean fromTenant) throws IOException {
+    public Document uploadDocument(MultipartFile file, String category, String description, Long clientId, String clientEmail, String clientName, String tenantName) throws IOException {
         Long tenantId = TenantContext.getTenantId();
         if (tenantId == null) {
             throw new IllegalStateException("No se pudo determinar el tenant");
         }
+
+        boolean fromTenant = isUserFromTenant();
 
         String originalFileName = file.getOriginalFilename();
         String fileExtension = "";
@@ -60,10 +71,48 @@ public class DocumentService {
                 .uploadedBy("user")
                 .fromTenant(fromTenant)
                 .description(description)
+                .clientId(clientId)
                 .build();
 
         document.setTenantId(tenantId);
-        return documentRepository.save(document);
+        Document saved = documentRepository.save(document);
+
+        if (fromTenant && clientId != null && clientEmail != null && !clientEmail.isBlank()) {
+            try {
+                notificationClient.sendDocumentoCompartido(
+                        clientEmail,
+                        clientName != null ? clientName : "Cliente",
+                        tenantName != null ? tenantName : "Estudio",
+                        tenantId,
+                        originalFileName,
+                        category,
+                        description
+                );
+            } catch (Exception e) {
+                log.warn("Error enviando notificacion de documento compartido: {}", e.getMessage());
+            }
+        }
+
+        return saved;
+    }
+
+    private boolean isUserFromTenant() {
+        try {
+            ServletRequestAttributes attrs = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
+            if (attrs == null) {
+                return true;
+            }
+            String authHeader = attrs.getRequest().getHeader("Authorization");
+            if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+                return true;
+            }
+            String jwt = authHeader.substring(7);
+            String role = jwtService.extractRole(jwt);
+            return "ROLE_ADMIN".equals(role) || "ROLE_STAFF".equals(role) || "ROLE_SUPER_ADMIN".equals(role);
+        } catch (Exception e) {
+            log.warn("Error determining user role from JWT, defaulting to tenant: {}", e.getMessage());
+            return true;
+        }
     }
 
     public List<Document> getDocumentsFromTenant(Long tenantId) {

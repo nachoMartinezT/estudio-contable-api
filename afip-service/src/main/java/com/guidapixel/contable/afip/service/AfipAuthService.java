@@ -1,5 +1,6 @@
 package com.guidapixel.contable.afip.service;
 
+import com.guidapixel.contable.shared.model.TenantAfipConfig;
 import org.bouncycastle.cms.*;
 import org.bouncycastle.cms.jcajce.JcaSignerInfoGeneratorBuilder;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
@@ -28,31 +29,30 @@ import java.util.regex.Pattern;
 @Service
 public class AfipAuthService {
 
-    @Value("${afip.cert.path}")
-    private String p12Path;
-
-    @Value("${afip.cert.password}")
-    private String p12Password;
-
-    @Value("${afip.wsaa.url}")
+    @Value("${afip.wsaa.url:https://wsaahomo.afip.gov.ar/ws/services/LoginCms}")
     private String wsaaUrl;
 
-    private Map<String, String> currentCredentials = null;
-    private long tokenExpirationTime = 0;
+    private final Map<Long, TenantTokenCache> tokenCache = new HashMap<>();
 
-    public Map<String, String> getAfipToken() throws Exception {
-        if (currentCredentials != null && System.currentTimeMillis() < tokenExpirationTime) {
-            return currentCredentials;
+    public Map<String, String> getAfipToken(TenantAfipConfig tenantConfig) throws Exception {
+        Long tenantId = tenantConfig.getTenantId();
+        TenantTokenCache cache = tokenCache.get(tenantId);
+
+        if (cache != null && System.currentTimeMillis() < cache.expirationTime) {
+            return cache.credentials;
         }
 
         byte[] loginTicketRequest = createLoginTicketRequest();
-        byte[] signedCms = signRequest(loginTicketRequest);
+        byte[] signedCms = signRequest(loginTicketRequest, tenantConfig);
         String responseXml = invokeWsaa(signedCms);
 
-        currentCredentials = parseResponse(responseXml);
-        tokenExpirationTime = System.currentTimeMillis() + (10 * 60 * 60 * 1000);
+        Map<String, String> credentials = parseResponse(responseXml);
+        tokenCache.put(tenantId, new TenantTokenCache(
+                credentials,
+                System.currentTimeMillis() + (10 * 60 * 60 * 1000)
+        ));
 
-        return currentCredentials;
+        return credentials;
     }
 
     private byte[] createLoginTicketRequest() {
@@ -63,7 +63,7 @@ public class AfipAuthService {
         String generationTime = now.minusMinutes(10).format(formatter);
         String expirationTime = now.plusMinutes(10).format(formatter);
 
-        String xml = "<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
+        return ("<?xml version=\"1.0\" encoding=\"UTF-8\"?>" +
                 "<loginTicketRequest version=\"1.0\">" +
                 "<header>" +
                 "<uniqueId>" + uniqueId + "</uniqueId>" +
@@ -71,20 +71,18 @@ public class AfipAuthService {
                 "<expirationTime>" + expirationTime + "</expirationTime>" +
                 "</header>" +
                 "<service>wsfe</service>" +
-                "</loginTicketRequest>";
-
-        return xml.getBytes(StandardCharsets.UTF_8);
+                "</loginTicketRequest>").getBytes(StandardCharsets.UTF_8);
     }
 
-    private byte[] signRequest(byte[] xmlBytes) throws Exception {
+    private byte[] signRequest(byte[] xmlBytes, TenantAfipConfig tenantConfig) throws Exception {
         Security.addProvider(new BouncyCastleProvider());
         KeyStore ks = KeyStore.getInstance("PKCS12");
-        try (FileInputStream fis = new FileInputStream(p12Path)) {
-            ks.load(fis, p12Password.toCharArray());
+        try (FileInputStream fis = new FileInputStream(tenantConfig.getAfipCertPath())) {
+            ks.load(fis, tenantConfig.getAfipCertPassword().toCharArray());
         }
 
         String alias = ks.aliases().nextElement();
-        PrivateKey privateKey = (PrivateKey) ks.getKey(alias, p12Password.toCharArray());
+        PrivateKey privateKey = (PrivateKey) ks.getKey(alias, tenantConfig.getAfipCertPassword().toCharArray());
         X509Certificate cert = (X509Certificate) ks.getCertificate(alias);
 
         List<X509Certificate> certList = new ArrayList<>();
@@ -152,5 +150,15 @@ public class AfipAuthService {
             throw new RuntimeException("No se pudo leer el Token del XML. XML Limpio: " + cleanXml);
         }
         return creds;
+    }
+
+    private static class TenantTokenCache {
+        final Map<String, String> credentials;
+        final long expirationTime;
+
+        TenantTokenCache(Map<String, String> credentials, long expirationTime) {
+            this.credentials = credentials;
+            this.expirationTime = expirationTime;
+        }
     }
 }

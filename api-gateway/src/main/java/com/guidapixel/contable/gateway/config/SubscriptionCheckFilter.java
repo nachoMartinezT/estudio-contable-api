@@ -43,7 +43,8 @@ public class SubscriptionCheckFilter implements GlobalFilter, Ordered {
             "/api/afip/", "afip",
             "/api/v1/audit/", "audit",
             "/api/v1/dashboard/", "dashboard",
-            "/api/v1/documents/", "documents"
+            "/api/v1/documents/", "documents",
+            "/api/v1/ledger/", "invoices"
     );
 
     public SubscriptionCheckFilter(
@@ -186,6 +187,7 @@ public class SubscriptionCheckFilter implements GlobalFilter, Ordered {
     private boolean isPublicPath(String path) {
         return path.startsWith("/api/v1/auth/") ||
                path.startsWith("/api/v1/admin/") ||
+               path.startsWith("/api/v1/mp/webhook/") ||
                path.startsWith("/v3/api-docs") ||
                path.startsWith("/swagger-ui");
     }

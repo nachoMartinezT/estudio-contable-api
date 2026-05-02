@@ -39,6 +39,18 @@ spring:
           uri: http://document-service:8087
           predicates:
             - Path=/api/v1/documents/**
+        - id: ledger-service
+          uri: http://ledger-service:8088
+          predicates:
+            - Path=/api/v1/ledger/**,/api/internal/ledger/**
+        - id: mp-service
+          uri: http://mp-service:8089
+          predicates:
+            - Path=/api/v1/mp/**,/api/internal/mp/**
+        - id: notification-service
+          uri: http://notification-service:8090
+          predicates:
+            - Path=/api/internal/notifications/**
 
 server:
   port: 8080

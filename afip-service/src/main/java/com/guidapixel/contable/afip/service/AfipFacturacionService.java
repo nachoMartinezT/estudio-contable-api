@@ -3,6 +3,7 @@ package com.guidapixel.contable.afip.service;
 import com.guidapixel.contable.afip.domain.model.Factura;
 import com.guidapixel.contable.afip.domain.repository.FacturaRepository;
 import com.guidapixel.contable.afip.web.dto.FacturaDto;
+import com.guidapixel.contable.shared.model.TenantAfipConfig;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -27,25 +28,13 @@ public class AfipFacturacionService {
     @Autowired
     private FacturaRepository facturaRepository;
 
-    @Value("${afip.wsfe.url}")
+    @Value("${afip.wsfe.url:https://wswhomo.afip.gov.ar/wsfev1/service.asmx}")
     private String wsfeUrl;
-
-    @Value("${afip.default.cuit-emisor}")
-    private String defaultCuitEmisor;
-
-    @Value("${afip.default.punto-venta:1}")
-    private Integer defaultPuntoVenta;
-
-    @Value("${afip.default.tipo-comprobante:11}")
-    private Integer defaultTipoComprobante;
 
     private static final DateTimeFormatter AFIP_DATE = DateTimeFormatter.ofPattern("yyyyMMdd");
 
-    /**
-     * Obtiene el \u00faltimo n\u00famero de comprobante autorizado para un punto de venta y tipo de comprobante.
-     */
-    public int obtenerUltimoComprobante(Integer puntoVenta, Integer tipoComprobante, String cuitEmisor) throws Exception {
-        Map<String, String> credenciales = authService.getAfipToken();
+    public int obtenerUltimoComprobante(Integer puntoVenta, Integer tipoComprobante, String cuitEmisor, TenantAfipConfig tenantConfig) throws Exception {
+        Map<String, String> credenciales = authService.getAfipToken(tenantConfig);
         String token = credenciales.get("token");
         String sign = credenciales.get("sign");
 
@@ -86,19 +75,16 @@ public class AfipFacturacionService {
         return Integer.parseInt(cbteNro);
     }
 
-    /**
-     * Emite una factura electr\u00f3nica solicitando CAE a AFIP.
-     */
-    public Map<String, Object> emitirFactura(FacturaDto datos, String cuitEmisor) throws Exception {
-        String cuit = (cuitEmisor != null && !cuitEmisor.isBlank()) ? cuitEmisor : defaultCuitEmisor;
-        Integer ptoVenta = datos.getPuntoVenta() != null ? datos.getPuntoVenta() : defaultPuntoVenta;
-        Integer tipoCbte = datos.getTipoComprobante() != null ? datos.getTipoComprobante() : defaultTipoComprobante;
+    public Map<String, Object> emitirFactura(FacturaDto datos, TenantAfipConfig tenantConfig) throws Exception {
+        String cuit = tenantConfig.getAfipCuit();
+        Integer ptoVenta = datos.getPuntoVenta() != null ? datos.getPuntoVenta() : 1;
+        Integer tipoCbte = datos.getTipoComprobante() != null ? datos.getTipoComprobante() : 11;
 
-        Map<String, String> credenciales = authService.getAfipToken();
+        Map<String, String> credenciales = authService.getAfipToken(tenantConfig);
         String token = credenciales.get("token");
         String sign = credenciales.get("sign");
 
-        int ultimoNro = obtenerUltimoComprobante(ptoVenta, tipoCbte, cuit);
+        int ultimoNro = obtenerUltimoComprobante(ptoVenta, tipoCbte, cuit, tenantConfig);
         int proximoNro = ultimoNro + 1;
 
         LocalDate fechaEmision = datos.getFechaEmision() != null ? datos.getFechaEmision() : LocalDate.now();
@@ -153,7 +139,7 @@ public class AfipFacturacionService {
         String observaciones = extraerObservaciones(respuestaXml);
 
         if (cae == null || "No encontrado".equals(cae) || cae.isEmpty()) {
-            throw new RuntimeException("AFIP RECHAZ\u00d3 LA FACTURA: " + (observaciones.isEmpty() ? extraerEtiqueta(respuestaXml, "Msg") : observaciones));
+            throw new RuntimeException("AFIP RECHAZO LA FACTURA: " + (observaciones.isEmpty() ? extraerEtiqueta(respuestaXml, "Msg") : observaciones));
         }
 
         Factura nuevaFactura = Factura.builder()
@@ -304,14 +290,14 @@ public class AfipFacturacionService {
     private String obtenerTipoComprobanteLabel(Integer tipo) {
         return switch (tipo) {
             case 1 -> "Factura A";
-            case 2 -> "Nota de D\u00e9bito A";
-            case 3 -> "Nota de Cr\u00e9dito A";
+            case 2 -> "Nota de Debito A";
+            case 3 -> "Nota de Credito A";
             case 6 -> "Factura B";
-            case 7 -> "Nota de D\u00e9bito B";
-            case 8 -> "Nota de Cr\u00e9dito B";
+            case 7 -> "Nota de Debito B";
+            case 8 -> "Nota de Credito B";
             case 11 -> "Factura C";
-            case 12 -> "Nota de D\u00e9bito C";
-            case 13 -> "Nota de Cr\u00e9dito C";
+            case 12 -> "Nota de Debito C";
+            case 13 -> "Nota de Credito C";
             default -> "Tipo " + tipo;
         };
     }

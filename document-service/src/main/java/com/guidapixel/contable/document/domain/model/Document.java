@@ -41,10 +41,12 @@ public class Document extends BaseEntity {
 
     private String description;
 
+    private Long clientId;
+
     private LocalDateTime downloadedAt;
 
     @PrePersist
-    void prePersist() {
+    public void prePersist() {
         if (this.downloadedAt == null) {
             this.downloadedAt = LocalDateTime.now();
         }

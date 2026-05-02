@@ -2,10 +2,12 @@ package com.guidapixel.contable.invoice.service;
 
 import com.guidapixel.contable.invoice.client.AfipClient;
 import com.guidapixel.contable.invoice.client.AfipFacturaRequest;
+import com.guidapixel.contable.invoice.client.LedgerClient;
 import com.guidapixel.contable.invoice.domain.model.Invoice;
 import com.guidapixel.contable.invoice.domain.model.InvoiceItem;
 import com.guidapixel.contable.invoice.domain.repository.InvoiceRepository;
 import com.guidapixel.contable.invoice.web.dto.InvoiceRequest;
+import com.guidapixel.contable.shared.multitenancy.TenantContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -21,9 +23,12 @@ public class InvoiceService {
 
     private final InvoiceRepository invoiceRepository;
     private final AfipClient afipClient;
+    private final LedgerClient ledgerClient;
 
     @Transactional
     public Invoice createInvoice(InvoiceRequest request) {
+        Long tenantId = TenantContext.getTenantId();
+
         Invoice invoice = Invoice.builder()
                 .numeroFactura(request.getNumeroFactura())
                 .fechaEmision(request.getFechaEmision())
@@ -54,11 +59,23 @@ public class InvoiceService {
             emitirEnAfip(invoice, request);
         }
 
-        return invoiceRepository.save(invoice);
+        Invoice savedInvoice = invoiceRepository.save(invoice);
+
+        ledgerClient.notifyInvoiceCreated(
+                tenantId,
+                request.getClientId(),
+                savedInvoice.getId(),
+                totalFactura,
+                "Factura " + (savedInvoice.getNumeroFactura() != null ? savedInvoice.getNumeroFactura() : "interna")
+        );
+
+        return savedInvoice;
     }
 
     private void emitirEnAfip(Invoice invoice, InvoiceRequest request) {
         log.info("Emitiendo factura en AFIP para invoice {}", invoice.getId());
+
+        Long tenantId = TenantContext.getTenantId();
 
         AfipFacturaRequest afipRequest = AfipFacturaRequest.builder()
                 .puntoVenta(request.getPuntoVenta())
@@ -80,7 +97,6 @@ public class InvoiceService {
                 .impIVA(request.getImpIVA())
                 .monedaId(request.getMonedaId())
                 .monedaCotiz(request.getMonedaCotiz())
-                .cuitEmisor(request.getCuitEmisor())
                 .items(request.getItems().stream()
                         .map(item -> AfipFacturaRequest.AfipItemRequest.builder()
                                 .concepto(item.getConcepto())
@@ -90,7 +106,7 @@ public class InvoiceService {
                         .toList())
                 .build();
 
-        Map<String, Object> resultado = afipClient.emitirFactura(afipRequest);
+        Map<String, Object> resultado = afipClient.emitirFactura(afipRequest, tenantId);
 
         invoice.setCae((String) resultado.get("cae"));
         invoice.setVencimientoCae(java.time.LocalDate.parse((String) resultado.get("vencimiento_cae")));

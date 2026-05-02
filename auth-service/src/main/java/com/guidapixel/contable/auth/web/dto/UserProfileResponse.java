@@ -18,4 +18,5 @@ public class UserProfileResponse {
     private Role role;
     private Long tenantId;
     private String tenantName;
+    private Long clientId;
 }
