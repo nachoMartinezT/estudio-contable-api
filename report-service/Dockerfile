@@ -14,7 +14,7 @@ COPY ledger-service ledger-service/
 COPY mp-service mp-service/
 COPY notification-service notification-service/
 COPY report-service report-service/
-RUN mvn -pl shared -am install -DskipTests -q && mvn -pl report-service -am package -DskipTests -q
+RUN mvn install -f shared/pom.xml -DskipTests -q && mvn package -f report-service/pom.xml -DskipTests -q
 
 FROM eclipse-temurin:21-jre-alpine
 WORKDIR /app
