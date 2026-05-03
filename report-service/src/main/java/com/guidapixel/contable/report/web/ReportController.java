@@ -1,6 +1,6 @@
-package com.guidapixel.contable.ledger.web;
+package com.guidapixel.contable.report.web;
 
-import com.guidapixel.contable.ledger.service.ReportService;
+import com.guidapixel.contable.report.service.ReportService;
 import com.guidapixel.contable.shared.multitenancy.TenantContext;
 import com.guidapixel.contable.shared.security.JwtService;
 import lombok.RequiredArgsConstructor;
@@ -13,7 +13,7 @@ import java.time.LocalDate;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/api/v1/ledger/reports")
+@RequestMapping("/api/v1/reports")
 @RequiredArgsConstructor
 public class ReportController {
 

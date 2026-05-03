@@ -1,16 +1,7 @@
-package com.guidapixel.contable.ledger.service;
+package com.guidapixel.contable.report.service;
 
-import com.guidapixel.contable.ledger.client.AuthClient;
-import com.guidapixel.contable.ledger.domain.model.AccountMovement;
-import com.guidapixel.contable.ledger.domain.model.FeeGenerationLog;
-import com.guidapixel.contable.ledger.domain.model.MovementDirection;
-import com.guidapixel.contable.ledger.domain.model.MovementType;
-import com.guidapixel.contable.ledger.domain.model.RecurringFee;
-import com.guidapixel.contable.ledger.domain.model.RecurringFeeOverride;
-import com.guidapixel.contable.ledger.domain.repository.AccountMovementRepository;
-import com.guidapixel.contable.ledger.domain.repository.FeeGenerationLogRepository;
-import com.guidapixel.contable.ledger.domain.repository.RecurringFeeOverrideRepository;
-import com.guidapixel.contable.ledger.domain.repository.RecurringFeeRepository;
+import com.guidapixel.contable.report.client.AuthClient;
+import com.guidapixel.contable.report.client.LedgerClient;
 import com.itextpdf.text.*;
 import com.itextpdf.text.pdf.*;
 import lombok.RequiredArgsConstructor;
@@ -35,10 +26,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class ReportService {
 
-    private final AccountMovementRepository movementRepository;
-    private final RecurringFeeRepository recurringFeeRepository;
-    private final FeeGenerationLogRepository feeGenerationLogRepository;
-    private final RecurringFeeOverrideRepository overrideRepository;
+    private final LedgerClient ledgerClient;
     private final AuthClient authClient;
 
     private static final BaseColor HEADER_BG = new BaseColor(30, 64, 175);
@@ -55,10 +43,9 @@ public class ReportService {
 
     public byte[] generateAccountStatementPdf(Long tenantId, Long clientId, LocalDate from, LocalDate to) {
         String tenantName = authClient.getTenantName(tenantId);
-        List<AccountMovement> movements = movementRepository.findByTenantAndClientAndDateRange(
-                tenantId, clientId, from.atStartOfDay(), to.atTime(23, 59, 59));
+        List<Map<String, Object>> movements = ledgerClient.getAccountStatementData(tenantId, clientId, from.toString(), to.toString());
 
-        String clientName = movements.isEmpty() ? "Cliente" : movements.get(0).getClientName();
+        String clientName = movements.isEmpty() ? "Cliente" : (String) movements.get(0).get("clientName");
         if (clientName == null) clientName = "Cliente";
 
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
@@ -88,22 +75,24 @@ public class ReportService {
             BigDecimal totalCredit = BigDecimal.ZERO;
             boolean alt = false;
 
-            for (AccountMovement m : movements) {
+            for (Map<String, Object> m : movements) {
                 BaseColor bgColor = alt ? ROW_ALT : BaseColor.WHITE;
                 alt = !alt;
 
-                BigDecimal debit = m.getDirection() == MovementDirection.DEBIT ? m.getAmount() : BigDecimal.ZERO;
-                BigDecimal credit = m.getDirection() == MovementDirection.CREDIT ? m.getAmount() : BigDecimal.ZERO;
+                String direction = (String) m.get("direction");
+                BigDecimal amount = toBigDecimal(m.get("amount"));
+                BigDecimal debit = "DEBIT".equals(direction) ? amount : BigDecimal.ZERO;
+                BigDecimal credit = "CREDIT".equals(direction) ? amount : BigDecimal.ZERO;
                 totalDebit = totalDebit.add(debit);
                 totalCredit = totalCredit.add(credit);
 
-                addPdfCell(table, formatDate(m.getCreatedAt()), bgColor);
-                addPdfCell(table, m.getDescription() != null ? m.getDescription() : "", bgColor);
-                addPdfCell(table, formatType(m.getType()), bgColor);
+                addPdfCell(table, formatCreatedAt(m.get("createdAt")), bgColor);
+                addPdfCell(table, (String) m.get("description"), bgColor);
+                addPdfCell(table, formatType((String) m.get("type")), bgColor);
                 addPdfCell(table, debit.compareTo(BigDecimal.ZERO) > 0 ? "$" + debit.toPlainString() : "-", bgColor);
                 addPdfCell(table, credit.compareTo(BigDecimal.ZERO) > 0 ? "$" + credit.toPlainString() : "-", bgColor);
-                addPdfCell(table, m.getPaidAt() != null ? "Pagado" : "Pendiente", bgColor);
-                addPdfCell(table, m.getDueDate() != null ? m.getDueDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) : "-", bgColor);
+                addPdfCell(table, m.get("paidAt") != null ? "Pagado" : "Pendiente", bgColor);
+                addPdfCell(table, formatDueDate(m.get("dueDate")), bgColor);
             }
 
             document.add(table);
@@ -129,10 +118,9 @@ public class ReportService {
 
     public byte[] generateAccountStatementExcel(Long tenantId, Long clientId, LocalDate from, LocalDate to) {
         String tenantName = authClient.getTenantName(tenantId);
-        List<AccountMovement> movements = movementRepository.findByTenantAndClientAndDateRange(
-                tenantId, clientId, from.atStartOfDay(), to.atTime(23, 59, 59));
+        List<Map<String, Object>> movements = ledgerClient.getAccountStatementData(tenantId, clientId, from.toString(), to.toString());
 
-        String clientName = movements.isEmpty() ? "Cliente" : movements.get(0).getClientName();
+        String clientName = movements.isEmpty() ? "Cliente" : (String) movements.get(0).get("clientName");
         if (clientName == null) clientName = "Cliente";
 
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
@@ -194,14 +182,16 @@ public class ReportService {
             BigDecimal totalDebit = BigDecimal.ZERO;
             BigDecimal totalCredit = BigDecimal.ZERO;
 
-            for (AccountMovement m : movements) {
+            for (Map<String, Object> m : movements) {
                 Row r = sheet.createRow(rowNum++);
-                r.createCell(0).setCellValue(m.getCreatedAt() != null ? m.getCreatedAt().toLocalDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) : "");
-                r.createCell(1).setCellValue(m.getDescription() != null ? m.getDescription() : "");
-                r.createCell(2).setCellValue(formatType(m.getType()));
+                r.createCell(0).setCellValue(formatCreatedAt(m.get("createdAt")));
+                r.createCell(1).setCellValue((String) m.get("description"));
+                r.createCell(2).setCellValue(formatType((String) m.get("type")));
 
-                BigDecimal debit = m.getDirection() == MovementDirection.DEBIT ? m.getAmount() : BigDecimal.ZERO;
-                BigDecimal credit = m.getDirection() == MovementDirection.CREDIT ? m.getAmount() : BigDecimal.ZERO;
+                String direction = (String) m.get("direction");
+                BigDecimal amount = toBigDecimal(m.get("amount"));
+                BigDecimal debit = "DEBIT".equals(direction) ? amount : BigDecimal.ZERO;
+                BigDecimal credit = "CREDIT".equals(direction) ? amount : BigDecimal.ZERO;
                 totalDebit = totalDebit.add(debit);
                 totalCredit = totalCredit.add(credit);
 
@@ -211,8 +201,8 @@ public class ReportService {
                 Cell cCell = r.createCell(4);
                 if (credit.compareTo(BigDecimal.ZERO) > 0) { cCell.setCellValue(credit.doubleValue()); cCell.setCellStyle(numberStyle); }
 
-                r.createCell(5).setCellValue(m.getPaidAt() != null ? "Pagado" : "Pendiente");
-                r.createCell(6).setCellValue(m.getDueDate() != null ? m.getDueDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) : "");
+                r.createCell(5).setCellValue(m.get("paidAt") != null ? "Pagado" : "Pendiente");
+                r.createCell(6).setCellValue(formatDueDate(m.get("dueDate")));
             }
 
             Row totalRow = sheet.createRow(rowNum);
@@ -237,28 +227,26 @@ public class ReportService {
 
     public byte[] generateFeePeriodSummaryPdf(Long tenantId, String yearMonth) {
         String tenantName = authClient.getTenantName(tenantId);
-        List<RecurringFee> activeFees = recurringFeeRepository.findByTenantIdAndActiveTrue(tenantId);
+        List<Map<String, Object>> fees = ledgerClient.getActiveFees(tenantId);
 
-        List<Map<String, Object>> feeData = activeFees.stream().map(fee -> {
-            BigDecimal baseAmount = fee.getBaseAmount();
-            BigDecimal overrideAmount = overrideRepository.findByTenantIdAndClientIdAndYearMonth(
-                            tenantId, fee.getClientId(), yearMonth)
-                    .map(RecurringFeeOverride::getOverrideAmount)
-                    .orElse(null);
+        List<Map<String, Object>> feeData = fees.stream().map(fee -> {
+            BigDecimal baseAmount = toBigDecimal(fee.get("baseAmount"));
+            Map<String, Object> override = ledgerClient.getFeeOverride(tenantId, toLong(fee.get("clientId")), yearMonth);
+            BigDecimal overrideAmount = override != null ? toBigDecimal(override.get("overrideAmount")) : null;
             BigDecimal finalAmount = overrideAmount != null ? overrideAmount : baseAmount;
 
-            FeeGenerationLog genLog = feeGenerationLogRepository.findByTenantIdAndClientIdAndYearMonth(
-                    tenantId, fee.getClientId(), yearMonth).stream().findFirst().orElse(null);
+            List<Map<String, Object>> logs = ledgerClient.getFeeGenerationLog(tenantId, toLong(fee.get("clientId")), yearMonth);
+            Map<String, Object> genLog = logs.isEmpty() ? null : logs.get(0);
 
             String estado = "Pendiente";
             LocalDate fechaGeneracion = null;
-            if (genLog != null && genLog.isSuccess()) {
+            if (genLog != null && Boolean.TRUE.equals(genLog.get("success"))) {
                 estado = "Generado";
-                fechaGeneracion = genLog.getGeneratedAt().toLocalDate();
+                fechaGeneracion = parseLocalDateTime(genLog.get("generatedAt")).toLocalDate();
             }
 
             return Map.<String, Object>of(
-                    "clientName", fee.getClientName() != null ? fee.getClientName() : "Cliente",
+                    "clientName", fee.get("clientName") != null ? fee.get("clientName") : "Cliente",
                     "baseAmount", baseAmount,
                     "overrideAmount", overrideAmount,
                     "finalAmount", finalAmount,
@@ -325,7 +313,7 @@ public class ReportService {
 
     public byte[] generateFeePeriodSummaryExcel(Long tenantId, String yearMonth) {
         String tenantName = authClient.getTenantName(tenantId);
-        List<RecurringFee> activeFees = recurringFeeRepository.findByTenantIdAndActiveTrue(tenantId);
+        List<Map<String, Object>> fees = ledgerClient.getActiveFees(tenantId);
 
         try (ByteArrayOutputStream baos = new ByteArrayOutputStream()) {
             Workbook wb = new XSSFWorkbook();
@@ -383,22 +371,20 @@ public class ReportService {
             int rowNum = 4;
             BigDecimal totalFinal = BigDecimal.ZERO;
 
-            for (RecurringFee fee : activeFees) {
-                BigDecimal baseAmount = fee.getBaseAmount();
-                BigDecimal overrideAmount = overrideRepository.findByTenantIdAndClientIdAndYearMonth(
-                                tenantId, fee.getClientId(), yearMonth)
-                        .map(RecurringFeeOverride::getOverrideAmount)
-                        .orElse(null);
+            for (Map<String, Object> fee : fees) {
+                BigDecimal baseAmount = toBigDecimal(fee.get("baseAmount"));
+                Map<String, Object> override = ledgerClient.getFeeOverride(tenantId, toLong(fee.get("clientId")), yearMonth);
+                BigDecimal overrideAmount = override != null ? toBigDecimal(override.get("overrideAmount")) : null;
                 BigDecimal finalAmount = overrideAmount != null ? overrideAmount : baseAmount;
                 totalFinal = totalFinal.add(finalAmount);
 
-                FeeGenerationLog genLog = feeGenerationLogRepository.findByTenantIdAndClientIdAndYearMonth(
-                        tenantId, fee.getClientId(), yearMonth).stream().findFirst().orElse(null);
-                String estado = (genLog != null && genLog.isSuccess()) ? "Generado" : "Pendiente";
-                LocalDate fechaGen = genLog != null ? genLog.getGeneratedAt().toLocalDate() : null;
+                List<Map<String, Object>> logs = ledgerClient.getFeeGenerationLog(tenantId, toLong(fee.get("clientId")), yearMonth);
+                Map<String, Object> genLog = logs.isEmpty() ? null : logs.get(0);
+                String estado = (genLog != null && Boolean.TRUE.equals(genLog.get("success"))) ? "Generado" : "Pendiente";
+                LocalDate fechaGen = genLog != null ? parseLocalDateTime(genLog.get("generatedAt")).toLocalDate() : null;
 
                 Row r = sheet.createRow(rowNum++);
-                r.createCell(0).setCellValue(fee.getClientName() != null ? fee.getClientName() : "Cliente");
+                r.createCell(0).setCellValue(fee.get("clientName") != null ? (String) fee.get("clientName") : "Cliente");
 
                 Cell bCell = r.createCell(1);
                 bCell.setCellValue(baseAmount.doubleValue());
@@ -434,23 +420,22 @@ public class ReportService {
 
     public byte[] generateIncomeSummaryPdf(Long tenantId, LocalDate from, LocalDate to) {
         String tenantName = authClient.getTenantName(tenantId);
-        List<AccountMovement> movements = movementRepository.findByTenantAndDateRange(
-                tenantId, from.atStartOfDay(), to.atTime(23, 59, 59));
+        List<Map<String, Object>> movements = ledgerClient.getAllMovements(tenantId, from.toString(), to.toString());
 
         Map<String, BigDecimal> monthlyIncome = movements.stream()
-                .filter(m -> m.getDirection() == MovementDirection.CREDIT && m.getPaidAt() != null)
+                .filter(m -> "CREDIT".equals(m.get("direction")) && m.get("paidAt") != null)
                 .collect(Collectors.groupingBy(
-                        m -> YearMonth.from(m.getCreatedAt()).toString(),
-                        Collectors.reducing(BigDecimal.ZERO, AccountMovement::getAmount, BigDecimal::add)
+                        m -> YearMonth.from(parseLocalDateTime(m.get("createdAt"))).toString(),
+                        Collectors.reducing(BigDecimal.ZERO, m -> toBigDecimal(m.get("amount")), BigDecimal::add)
                 ));
 
         BigDecimal totalPending = movements.stream()
-                .filter(m -> m.getDirection() == MovementDirection.DEBIT && m.getPaidAt() == null)
-                .map(AccountMovement::getAmount)
+                .filter(m -> "DEBIT".equals(m.get("direction")) && m.get("paidAt") == null)
+                .map(m -> toBigDecimal(m.get("amount")))
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         long activeClients = movements.stream()
-                .map(AccountMovement::getClientId)
+                .map(m -> m.get("clientId"))
                 .distinct()
                 .count();
 
@@ -606,18 +591,48 @@ public class ReportService {
         document.add(footer);
     }
 
-    private String formatDate(LocalDateTime dt) {
+    private String formatCreatedAt(Object createdAt) {
+        if (createdAt == null) return "-";
+        LocalDateTime dt = parseLocalDateTime(createdAt);
         return dt != null ? dt.toLocalDate().format(DateTimeFormatter.ofPattern("dd/MM/yyyy")) : "-";
     }
 
-    private String formatType(MovementType type) {
+    private String formatDueDate(Object dueDate) {
+        if (dueDate == null) return "-";
+        if (dueDate instanceof java.time.LocalDate) {
+            return ((LocalDate) dueDate).format(DateTimeFormatter.ofPattern("dd/MM/yyyy"));
+        }
+        return "-";
+    }
+
+    private String formatType(String type) {
         if (type == null) return "-";
         return switch (type) {
-            case CARGO_FACTURA -> "Factura";
-            case CARGO_MANUAL -> "Cargo";
-            case PAGO_EFECTIVO -> "Pago Efectivo";
-            case PAGO_TRANSFERENCIA -> "Transferencia";
-            case PAGO_OTRO -> "Otro Pago";
+            case "CARGO_FACTURA" -> "Factura";
+            case "CARGO_MANUAL" -> "Cargo";
+            case "PAGO_EFECTIVO" -> "Pago Efectivo";
+            case "PAGO_TRANSFERENCIA" -> "Transferencia";
+            case "PAGO_OTRO" -> "Otro Pago";
+            default -> type;
         };
+    }
+
+    private BigDecimal toBigDecimal(Object val) {
+        if (val == null) return BigDecimal.ZERO;
+        if (val instanceof BigDecimal) return (BigDecimal) val;
+        if (val instanceof Number) return new BigDecimal(val.toString());
+        try { return new BigDecimal(val.toString()); } catch (Exception e) { return BigDecimal.ZERO; }
+    }
+
+    private Long toLong(Object val) {
+        if (val == null) return 0L;
+        if (val instanceof Number) return ((Number) val).longValue();
+        try { return Long.parseLong(val.toString()); } catch (Exception e) { return 0L; }
+    }
+
+    private LocalDateTime parseLocalDateTime(Object val) {
+        if (val == null) return null;
+        if (val instanceof LocalDateTime) return (LocalDateTime) val;
+        try { return LocalDateTime.parse(val.toString()); } catch (Exception e) { return null; }
     }
 }

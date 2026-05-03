@@ -184,25 +184,6 @@ services:
     networks:
       - guida-internal
 
-  report-service:
-    build:
-      context: .
-      dockerfile: report-service/Dockerfile
-    container_name: guida-reports
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-    environment:
-      DB_URL: jdbc:postgresql://postgres:5432/guida_contable
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
-      AUTH_SERVICE_URL: http://auth-service:8081
-      INTERNAL_API_KEY: ${INTERNAL_API_KEY}
-      JAVA_OPTS: "-Xmx256m -Xms128m"
-    networks:
-      - guida-internal
-
   mp-service:
     build:
       context: .
@@ -245,14 +226,9 @@ services:
       dockerfile: report-service/Dockerfile
     container_name: guida-reports
     restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
     environment:
-      DB_URL: jdbc:postgresql://postgres:5432/guida_contable
-      DB_USER: ${DB_USER}
-      DB_PASSWORD: ${DB_PASSWORD}
       AUTH_SERVICE_URL: http://auth-service:8081
+      LEDGER_SERVICE_URL: http://ledger-service:8088
       INTERNAL_API_KEY: ${INTERNAL_API_KEY}
       JAVA_OPTS: "-Xmx256m -Xms128m"
     networks:

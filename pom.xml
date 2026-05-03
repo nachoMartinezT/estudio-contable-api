@@ -30,6 +30,7 @@
         <module>ledger-service</module>
         <module>mp-service</module>
         <module>notification-service</module>
+        <module>report-service</module>
     </modules>
 
     <properties>
