@@ -21,6 +21,7 @@ services:
     environment:
       JAVA_OPTS: "-Xmx256m -Xms128m"
       JWT_SECRET: ${JWT_SECRET}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:http://localhost:5173}
       SERVICES_AUTH_SERVICE_URL: http://auth-service:8081
     networks:
       - guida-internal
