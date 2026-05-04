@@ -38,4 +38,28 @@ public class ClientController {
                 .map(ResponseEntity::ok)
                 .orElse(ResponseEntity.notFound().build());
     }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<?> updateClient(@PathVariable Long id, @RequestBody Client clientData) {
+        return clientRepository.findById(id)
+                .map(existing -> {
+                    existing.setRazonSocial(clientData.getRazonSocial());
+                    existing.setCuit(clientData.getCuit());
+                    existing.setEmail(clientData.getEmail());
+                    existing.setTelefono(clientData.getTelefono());
+                    return ResponseEntity.ok(clientRepository.save(existing));
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<?> deleteClient(@PathVariable Long id) {
+        return clientRepository.findById(id)
+                .map(client -> {
+                    client.setActivo(false);
+                    clientRepository.save(client);
+                    return ResponseEntity.ok().build();
+                })
+                .orElse(ResponseEntity.notFound().build());
+    }
 }

@@ -41,6 +41,9 @@ public class Invoice extends BaseEntity {
     private Integer nroComprobanteAfip;
     private String estadoAfip;
 
+    @Builder.Default
+    private String estado = "BORRADOR";
+
     public void addItem(InvoiceItem item) {
         items.add(item);
         item.setInvoice(this);

@@ -18,4 +18,11 @@ public class Client extends BaseEntity {
 
     private String email;
     private String telefono;
+
+    @Builder.Default
+    private boolean activo = true;
+
+    public String getEstado() {
+        return activo ? "ACTIVO" : "INACTIVO";
+    }
 }

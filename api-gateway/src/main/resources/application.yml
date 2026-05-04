@@ -47,6 +47,18 @@ spring:
           uri: http://mp-service:8089
           predicates:
             - Path=/api/v1/mp/**,/api/internal/mp/**
+        - id: report-service
+          uri: http://report-service:8091
+          predicates:
+            - Path=/api/v1/reports/**
+        - id: fees-service
+          uri: http://ledger-service:8088
+          predicates:
+            - Path=/api/v1/fees/**
+        - id: tenant-service
+          uri: http://auth-service:8081
+          predicates:
+            - Path=/api/v1/tenants/**
         - id: notification-service
           uri: http://notification-service:8090
           predicates:

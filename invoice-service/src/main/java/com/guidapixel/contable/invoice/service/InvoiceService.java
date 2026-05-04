@@ -10,6 +10,8 @@ import com.guidapixel.contable.invoice.web.dto.InvoiceRequest;
 import com.guidapixel.contable.shared.multitenancy.TenantContext;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -118,5 +120,71 @@ public class InvoiceService {
 
         log.info("Factura emitida en AFIP exitosamente. CAE: {}, Nro: {}",
                 invoice.getCae(), invoice.getNumeroFactura());
+    }
+
+    public Page<Invoice> getInvoicesByTenant(Long tenantId, String estado, Pageable pageable) {
+        if (estado != null && !estado.isBlank()) {
+            return invoiceRepository.findByTenantIdAndEstado(tenantId, estado, pageable);
+        }
+        return invoiceRepository.findByTenantId(tenantId, pageable);
+    }
+
+    public Invoice getInvoiceById(Long invoiceId) {
+        Long tenantId = TenantContext.getTenantId();
+        Invoice invoice = invoiceRepository.findById(invoiceId)
+                .orElseThrow(() -> new RuntimeException("Factura no encontrada"));
+        if (!invoice.getTenantId().equals(tenantId)) {
+            throw new RuntimeException("No tienes acceso a esta factura");
+        }
+        return invoice;
+    }
+
+    @Transactional
+    public Invoice emitirFactura(Long invoiceId) {
+        Long tenantId = TenantContext.getTenantId();
+        Invoice invoice = invoiceRepository.findById(invoiceId)
+                .orElseThrow(() -> new RuntimeException("Factura no encontrada"));
+        if (!invoice.getTenantId().equals(tenantId)) {
+            throw new RuntimeException("No tienes acceso a esta factura");
+        }
+        if (invoice.isEmitidaAfip()) {
+            throw new RuntimeException("La factura ya fue emitida a AFIP");
+        }
+
+        emitirEnAfip(invoice, toInvoiceRequest(invoice));
+        invoice.setEstado("EMITIDA_AFIP");
+        return invoiceRepository.save(invoice);
+    }
+
+    @Transactional
+    public Invoice anularFactura(Long invoiceId) {
+        Long tenantId = TenantContext.getTenantId();
+        Invoice invoice = invoiceRepository.findById(invoiceId)
+                .orElseThrow(() -> new RuntimeException("Factura no encontrada"));
+        if (!invoice.getTenantId().equals(tenantId)) {
+            throw new RuntimeException("No tienes acceso a esta factura");
+        }
+        if (invoice.isEmitidaAfip()) {
+            throw new RuntimeException("No se puede anular una factura ya emitida a AFIP");
+        }
+        invoice.setEstado("ANULADA");
+        return invoiceRepository.save(invoice);
+    }
+
+    private InvoiceRequest toInvoiceRequest(Invoice invoice) {
+        InvoiceRequest request = new InvoiceRequest();
+        request.setClientId(invoice.getClientId());
+        request.setNumeroFactura(invoice.getNumeroFactura());
+        request.setFechaEmision(invoice.getFechaEmision());
+        request.setTipoComprobante(invoice.getTipoComprobante());
+        request.setPuntoVenta(invoice.getPuntoVenta());
+        request.setItems(invoice.getItems().stream().map(item -> {
+            var itemReq = new com.guidapixel.contable.invoice.web.dto.InvoiceItemRequest();
+            itemReq.setConcepto(item.getConcepto());
+            itemReq.setCantidad(item.getCantidad());
+            itemReq.setPrecioUnitario(item.getPrecioUnitario());
+            return itemReq;
+        }).toList());
+        return request;
     }
 }
