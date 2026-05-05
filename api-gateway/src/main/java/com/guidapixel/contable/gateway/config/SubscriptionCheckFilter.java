@@ -113,7 +113,11 @@ public class SubscriptionCheckFilter implements GlobalFilter, Ordered {
                     if (modules != null && modules.contains(module)) {
                         return chain.filter(exchange);
                     }
-                    return denyAccess(exchange, module);
+                    if (modules != null) {
+                        return denyAccess(exchange, module);
+                    }
+                    log.warn("Tenant {} not found in subscription cache after refresh — allowing request", tenantId);
+                    return chain.filter(exchange);
                 }));
     }
 
