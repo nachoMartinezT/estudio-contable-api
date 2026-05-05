@@ -163,4 +163,14 @@ public class AdminController {
             return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", e.getMessage()));
         }
     }
+
+    @DeleteMapping("/tenants/{id}")
+    public ResponseEntity<?> deleteTenant(@PathVariable Long id) {
+        try {
+            adminService.deleteTenant(id);
+            return ResponseEntity.ok(Map.of("status", "OK", "message", "Estudio eliminado correctamente"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", e.getMessage()));
+        }
+    }
 }

@@ -275,6 +275,24 @@ public class AdminService {
         );
     }
 
+    @Transactional
+    public void deleteTenant(Long tenantId) {
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new RuntimeException("Tenant no encontrado"));
+
+        List<Subscription> subscriptions = subscriptionRepository.findByTenantId(tenantId);
+        subscriptionRepository.deleteAll(subscriptions);
+
+        List<User> users = userRepository.findByTenantId(tenantId);
+        for (User user : users) {
+            staffPermissionsRepository.findByStaffUserIdAndTenantId(user.getId(), tenantId)
+                    .ifPresent(staffPermissionsRepository::delete);
+        }
+        userRepository.deleteAll(users);
+
+        tenantRepository.delete(tenant);
+    }
+
     private void crearSubscripcionesDefault(Long tenantId) {
         List<Module> modulosDefault = Arrays.asList(
                 Module.CLIENTS,
