@@ -6,6 +6,7 @@ import com.guidapixel.contable.auth.web.dto.CreateTenantRequest;
 import com.guidapixel.contable.auth.web.dto.CreateUserRequest;
 import com.guidapixel.contable.auth.web.dto.UpdateTenantAfipConfigRequest;
 import com.guidapixel.contable.auth.web.dto.UpdateTenantMpConfigRequest;
+import com.guidapixel.contable.auth.web.dto.UpdateTenantRequest;
 import com.guidapixel.contable.auth.web.dto.TenantMpConfigResponse;
 import com.guidapixel.contable.shared.model.TenantAfipConfig;
 import lombok.RequiredArgsConstructor;
@@ -46,6 +47,18 @@ public class AdminController {
             return ResponseEntity.ok(adminService.getTenantWithSubscriptions(id));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
+        }
+    }
+
+    @PutMapping("/tenants/{id}")
+    public ResponseEntity<?> updateTenant(
+            @PathVariable Long id,
+            @RequestBody UpdateTenantRequest request
+    ) {
+        try {
+            return ResponseEntity.ok(adminService.updateTenant(id, request));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", e.getMessage()));
         }
     }
 

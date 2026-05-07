@@ -18,6 +18,7 @@ import com.guidapixel.contable.auth.web.dto.StaffPermissionsResponse;
 import com.guidapixel.contable.auth.web.dto.UpdateStaffPermissionsRequest;
 import com.guidapixel.contable.auth.web.dto.UpdateTenantAfipConfigRequest;
 import com.guidapixel.contable.auth.web.dto.UpdateTenantMpConfigRequest;
+import com.guidapixel.contable.auth.web.dto.UpdateTenantRequest;
 import com.guidapixel.contable.auth.web.dto.TenantMpConfigResponse;
 import com.guidapixel.contable.shared.model.TenantAfipConfig;
 import lombok.RequiredArgsConstructor;
@@ -291,6 +292,36 @@ public class AdminService {
         userRepository.deleteAll(users);
 
         tenantRepository.delete(tenant);
+    }
+
+    @Transactional
+    public Map<String, Object> updateTenant(Long tenantId, UpdateTenantRequest request) {
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new RuntimeException("Tenant no encontrado"));
+
+        if (request.getRazonSocial() != null) {
+            tenant.setRazonSocial(request.getRazonSocial());
+        }
+        if (request.getCuit() != null) {
+            tenant.setCuit(request.getCuit());
+        }
+        if (request.getEmailContacto() != null) {
+            tenant.setEmailContacto(request.getEmailContacto());
+        }
+        if (request.getActivo() != null) {
+            tenant.setActivo(request.getActivo());
+        }
+
+        tenantRepository.save(tenant);
+
+        return Map.of(
+                "status", "OK",
+                "id", tenant.getId(),
+                "razonSocial", tenant.getRazonSocial(),
+                "cuit", tenant.getCuit(),
+                "emailContacto", tenant.getEmailContacto(),
+                "activo", tenant.isActivo()
+        );
     }
 
     private void crearSubscripcionesDefault(Long tenantId) {
