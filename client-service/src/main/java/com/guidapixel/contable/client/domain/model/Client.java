@@ -19,6 +19,12 @@ public class Client extends BaseEntity {
     private String email;
     private String telefono;
 
+    @Column(name = "condicion_iva")
+    private String condicionIVA;
+
+    @Column(name = "honorario_mensual")
+    private java.math.BigDecimal honorarioMensual;
+
     @Builder.Default
     private boolean activo = true;
 
