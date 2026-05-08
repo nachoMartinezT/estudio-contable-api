@@ -16,12 +16,16 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.Map;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class InvoiceService {
+
+    private static final DateTimeFormatter AFIP_DATE = DateTimeFormatter.BASIC_ISO_DATE;
 
     private final InvoiceRepository invoiceRepository;
     private final AfipClient afipClient;
@@ -111,15 +115,33 @@ public class InvoiceService {
         Map<String, Object> resultado = afipClient.emitirFactura(afipRequest, tenantId);
 
         invoice.setCae((String) resultado.get("cae"));
-        invoice.setVencimientoCae(java.time.LocalDate.parse((String) resultado.get("vencimiento_cae")));
-        invoice.setNroComprobanteAfip(Integer.parseInt((String) resultado.get("numero_comprobante")));
+        invoice.setVencimientoCae(parseAfipDate(resultado.get("vencimiento_cae")));
+        invoice.setNroComprobanteAfip(toInteger(resultado.get("numero_comprobante")));
         invoice.setEstadoAfip((String) resultado.get("estado"));
+        invoice.setEstado("EMITIDA_AFIP");
         invoice.setNumeroFactura(String.format("%04d-%08d",
                 invoice.getPuntoVenta(),
                 invoice.getNroComprobanteAfip()));
 
         log.info("Factura emitida en AFIP exitosamente. CAE: {}, Nro: {}",
                 invoice.getCae(), invoice.getNumeroFactura());
+    }
+
+    private LocalDate parseAfipDate(Object value) {
+        if (value == null) {
+            throw new RuntimeException("AFIP no informo vencimiento de CAE");
+        }
+        return LocalDate.parse(value.toString(), AFIP_DATE);
+    }
+
+    private Integer toInteger(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value != null) {
+            return Integer.parseInt(value.toString());
+        }
+        throw new RuntimeException("AFIP no informo numero de comprobante");
     }
 
     public Page<Invoice> getInvoicesByTenant(Long tenantId, String estado, Pageable pageable) {

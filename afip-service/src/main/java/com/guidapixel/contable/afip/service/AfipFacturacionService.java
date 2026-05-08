@@ -28,12 +28,16 @@ public class AfipFacturacionService {
     @Autowired
     private FacturaRepository facturaRepository;
 
-    @Value("${afip.wsfe.url:https://wswhomo.afip.gov.ar/wsfev1/service.asmx}")
-    private String wsfeUrl;
+    @Value("${afip.wsfe.homologacion-url:https://wswhomo.afip.gov.ar/wsfev1/service.asmx}")
+    private String wsfeHomologacionUrl;
+
+    @Value("${afip.wsfe.produccion-url:https://servicios1.afip.gov.ar/wsfev1/service.asmx}")
+    private String wsfeProduccionUrl;
 
     private static final DateTimeFormatter AFIP_DATE = DateTimeFormatter.ofPattern("yyyyMMdd");
 
     public int obtenerUltimoComprobante(Integer puntoVenta, Integer tipoComprobante, String cuitEmisor, TenantAfipConfig tenantConfig) throws Exception {
+        cuitEmisor = normalizarCuit(cuitEmisor);
         Map<String, String> credenciales = authService.getAfipToken(tenantConfig);
         String token = credenciales.get("token");
         String sign = credenciales.get("sign");
@@ -56,7 +60,7 @@ public class AfipFacturacionService {
 
         HttpClient client = HttpClient.newHttpClient();
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(wsfeUrl))
+                .uri(URI.create(resolveWsfeUrl(tenantConfig)))
                 .header("Content-Type", "text/xml;charset=UTF-8")
                 .header("SOAPAction", "http://ar.gov.afip.dif.FEV1/FECompUltimoAutorizado")
                 .POST(HttpRequest.BodyPublishers.ofString(soapXml))
@@ -76,7 +80,7 @@ public class AfipFacturacionService {
     }
 
     public Map<String, Object> emitirFactura(FacturaDto datos, TenantAfipConfig tenantConfig) throws Exception {
-        String cuit = tenantConfig.getAfipCuit();
+        String cuit = normalizarCuit(tenantConfig.getAfipCuit());
         Integer ptoVenta = datos.getPuntoVenta() != null ? datos.getPuntoVenta() : 1;
         Integer tipoCbte = datos.getTipoComprobante() != null ? datos.getTipoComprobante() : 11;
 
@@ -120,7 +124,7 @@ public class AfipFacturacionService {
 
         HttpClient client = HttpClient.newHttpClient();
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(wsfeUrl))
+                .uri(URI.create(resolveWsfeUrl(tenantConfig)))
                 .header("Content-Type", "text/xml;charset=UTF-8")
                 .header("SOAPAction", "http://ar.gov.afip.dif.FEV1/FECAESolicitar")
                 .POST(HttpRequest.BodyPublishers.ofString(soapXml))
@@ -272,19 +276,34 @@ public class AfipFacturacionService {
     }
 
     private String extraerEtiqueta(String xml, String tagName) {
-        Matcher m = Pattern.compile("<" + tagName + ">(.*?)</" + tagName + ">").matcher(xml);
+        Matcher m = Pattern.compile("<" + tagName + ">(.*?)</" + tagName + ">", Pattern.DOTALL).matcher(xml);
         if (m.find()) return m.group(1);
         return "No encontrado";
     }
 
     private String extraerObservaciones(String xml) {
         StringBuilder obs = new StringBuilder();
-        Matcher m = Pattern.compile("<Observacion>.*?<Msg>(.*?)</Msg>.*?</Observacion>").matcher(xml);
+        Matcher m = Pattern.compile("<Observacion>.*?<Msg>(.*?)</Msg>.*?</Observacion>", Pattern.DOTALL).matcher(xml);
         while (m.find()) {
             if (!obs.isEmpty()) obs.append("; ");
             obs.append(m.group(1));
         }
         return obs.toString();
+    }
+
+    private String resolveWsfeUrl(TenantAfipConfig tenantConfig) {
+        return tenantConfig.isAfipHomologacion() ? wsfeHomologacionUrl : wsfeProduccionUrl;
+    }
+
+    private String normalizarCuit(String cuit) {
+        if (cuit == null) {
+            throw new IllegalArgumentException("El CUIT emisor es obligatorio para emitir en AFIP");
+        }
+        String soloNumeros = cuit.replaceAll("\\D", "");
+        if (soloNumeros.length() != 11) {
+            throw new IllegalArgumentException("El CUIT emisor debe tener 11 digitos numericos");
+        }
+        return soloNumeros;
     }
 
     private String obtenerTipoComprobanteLabel(Integer tipo) {
