@@ -132,30 +132,6 @@ public class InvoiceService {
                 invoice.getCae(), invoice.getNumeroFactura());
     }
 
-    private void sendInvoiceEmail(Invoice invoice, InvoiceRequest request, Long tenantId) {
-        Map<String, Object> clientInfo = clientInfoClient.getClient(tenantId, request.getClientId()).orElse(Map.of());
-        String clientEmail = request.getClientEmail() != null && !request.getClientEmail().isBlank()
-                ? request.getClientEmail()
-                : (String) clientInfo.getOrDefault("email", "");
-        String clientName = request.getNombreCliente() != null && !request.getNombreCliente().isBlank()
-                ? request.getNombreCliente()
-                : (String) clientInfo.getOrDefault("razonSocial", "Cliente");
-
-        notificationClient.sendFacturaEmitida(
-                clientEmail,
-                clientName,
-                tenantId,
-                Map.of(
-                        "nombreEstudio", "Estudio",
-                        "nombreCliente", clientName,
-                        "numeroFactura", invoice.getNumeroFactura() != null ? invoice.getNumeroFactura() : "",
-                        "cae", invoice.getCae() != null ? invoice.getCae() : "",
-                        "monto", invoice.getTotal() != null ? invoice.getTotal().toString() : "0",
-                        "fechaEmision", invoice.getFechaEmision() != null ? invoice.getFechaEmision().toString() : ""
-                )
-        );
-    }
-
     private LocalDate parseAfipDate(Object value) {
         if (value == null) {
             throw new RuntimeException("AFIP no informo vencimiento de CAE");
