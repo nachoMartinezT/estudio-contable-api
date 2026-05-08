@@ -34,11 +34,18 @@ public class AfipClient {
                     .bodyToMono(Map.class)
                     .block();
 
-            if (response != null && "ERROR".equals(response.get("status"))) {
+            if (response == null) {
+                throw new RuntimeException("AFIP service no devolvio respuesta");
+            }
+            if ("ERROR".equals(response.get("status"))) {
                 throw new RuntimeException("AFIP rechazo la factura: " + response.get("mensaje"));
             }
 
-            return (Map<String, Object>) response.get("datos_factura");
+            Object datosFactura = response.get("datos_factura");
+            if (!(datosFactura instanceof Map<?, ?>)) {
+                throw new RuntimeException("AFIP service devolvio una respuesta sin datos_factura");
+            }
+            return (Map<String, Object>) datosFactura;
         } catch (Exception e) {
             log.error("Error comunicandose con AFIP service: {}", e.getMessage());
             throw new RuntimeException("Error al emitir factura en AFIP: " + e.getMessage(), e);

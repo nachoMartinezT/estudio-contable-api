@@ -55,9 +55,11 @@ Sistema de gestion contable con emision de facturas electronicas oficiales ante 
 Crear archivo `.env` en la raiz del proyecto:
 
 ```env
-# URLs de AFIP (homologacion por defecto)
-AFIP_WSAA_URL=https://wsaahomo.afip.gov.ar/ws/services/LoginCms
-AFIP_WSFE_URL=https://wswhomo.afip.gov.ar/wsfev1/service.asmx
+# URLs de AFIP por ambiente (el tenant define si usa homologacion o produccion)
+AFIP_WSAA_HOMOLOGACION_URL=https://wsaahomo.afip.gov.ar/ws/services/LoginCms
+AFIP_WSAA_PRODUCCION_URL=https://wsaa.afip.gov.ar/ws/services/LoginCms
+AFIP_WSFE_HOMOLOGACION_URL=https://wswhomo.afip.gov.ar/wsfev1/service.asmx
+AFIP_WSFE_PRODUCCION_URL=https://servicios1.afip.gov.ar/wsfev1/service.asmx
 
 # Clave para encriptar passwords de certificados AFIP
 AFIP_ENCRYPTION_KEY=GuidaContable2026SecureKey!
@@ -192,21 +194,19 @@ Se muestra un panel verde con:
 
 ### Homologacion vs Produccion
 
-Por defecto el sistema apunta a **homologacion** (sandbox de AFIP).
-
-Para pasar a **produccion**, cambiar las variables de entorno en `.env`:
+El sistema tiene configuradas URLs de **homologacion** y **produccion** en paralelo, y selecciona el ambiente segun la configuracion AFIP de cada tenant (`afipHomologacion`).
 
 ```env
-# Homologacion (default)
-AFIP_WSAA_URL=https://wsaahomo.afip.gov.ar/ws/services/LoginCms
-AFIP_WSFE_URL=https://wswhomo.afip.gov.ar/wsfev1/service.asmx
+# Homologacion
+AFIP_WSAA_HOMOLOGACION_URL=https://wsaahomo.afip.gov.ar/ws/services/LoginCms
+AFIP_WSFE_HOMOLOGACION_URL=https://wswhomo.afip.gov.ar/wsfev1/service.asmx
 
 # Produccion
-AFIP_WSAA_URL=https://wsaa.afip.gov.ar/ws/services/LoginCms
-AFIP_WSFE_URL=https://servicios1.afip.gov.ar/wsfev1/service.asmx
+AFIP_WSAA_PRODUCCION_URL=https://wsaa.afip.gov.ar/ws/services/LoginCms
+AFIP_WSFE_PRODUCCION_URL=https://servicios1.afip.gov.ar/wsfev1/service.asmx
 ```
 
-Tambien necesitas un certificado de **produccion** (no el de homologacion).
+Para operar en **produccion**, el tenant debe tener `afipHomologacion=false` y un certificado de **produccion** (no el de homologacion).
 
 ### Configuracion AFIP por Tenant
 
