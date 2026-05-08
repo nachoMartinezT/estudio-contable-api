@@ -103,8 +103,17 @@ public class LedgerService {
 
     @Transactional
     public MovementResponse createPaymentLinkForMovement(Long movementId) {
+        Long currentTenantId = TenantContext.getTenantId();
+        if (currentTenantId == null) {
+            throw new IllegalStateException("No se pudo determinar el tenant");
+        }
+
         AccountMovement movement = movementRepository.findById(movementId)
                 .orElseThrow(() -> new RuntimeException("Movimiento no encontrado"));
+
+        if (!movement.getTenantId().equals(currentTenantId)) {
+            throw new RuntimeException("No tienes acceso a este movimiento");
+        }
 
         if (movement.getPaidAt() != null) {
             throw new RuntimeException("El movimiento ya esta marcado como pagado");

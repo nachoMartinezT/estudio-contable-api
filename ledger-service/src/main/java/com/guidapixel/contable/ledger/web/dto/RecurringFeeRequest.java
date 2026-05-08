@@ -14,4 +14,7 @@ import java.math.BigDecimal;
 public class RecurringFeeRequest {
     private BigDecimal baseAmount;
     private Boolean active;
+    private Integer dayOfMonth;
+    private String clientEmail;
+    private String clientName;
 }

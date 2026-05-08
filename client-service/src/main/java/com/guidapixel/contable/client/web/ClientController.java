@@ -1,65 +1,65 @@
 package com.guidapixel.contable.client.web;
 
 import com.guidapixel.contable.client.domain.model.Client;
-import com.guidapixel.contable.client.domain.repository.ClientRepository;
 import com.guidapixel.contable.client.service.ClientService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
+import java.util.Map;
 
 @RestController
 @RequestMapping("/api/v1/clients")
 @RequiredArgsConstructor
 public class ClientController {
 
-    private final ClientRepository clientRepository;
     private final ClientService clientService;
 
     @PostMapping
-    public ResponseEntity<Client> createClient(@RequestBody Client client) {
-        return ResponseEntity.ok(clientService.createClient(client));
+    public ResponseEntity<?> createClient(@RequestBody Client client) {
+        try {
+            return ResponseEntity.ok(clientService.createClient(client));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", e.getMessage()));
+        }
     }
 
     @GetMapping
     public ResponseEntity<List<Client>> getAllClients() {
-        return ResponseEntity.ok(clientRepository.findAll());
+        return ResponseEntity.ok(clientService.getActiveClients());
     }
 
     @GetMapping("/count")
     public ResponseEntity<Long> count() {
-        return ResponseEntity.ok(clientRepository.count());
+        return ResponseEntity.ok(clientService.countActiveClients());
     }
 
     @GetMapping("/{id}")
-    public ResponseEntity<Client> getById(@PathVariable Long id) {
-        return clientRepository.findById(id)
-                .map(ResponseEntity::ok)
-                .orElse(ResponseEntity.notFound().build());
+    public ResponseEntity<?> getById(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(clientService.getClient(id));
+        } catch (Exception e) {
+            return ResponseEntity.status(404).body(Map.of("status", "ERROR", "error", e.getMessage()));
+        }
     }
 
     @PutMapping("/{id}")
     public ResponseEntity<?> updateClient(@PathVariable Long id, @RequestBody Client clientData) {
-        return clientRepository.findById(id)
-                .map(existing -> {
-                    existing.setRazonSocial(clientData.getRazonSocial());
-                    existing.setCuit(clientData.getCuit());
-                    existing.setEmail(clientData.getEmail());
-                    existing.setTelefono(clientData.getTelefono());
-                    return ResponseEntity.ok(clientRepository.save(existing));
-                })
-                .orElse(ResponseEntity.notFound().build());
+        try {
+            return ResponseEntity.ok(clientService.updateClient(id, clientData));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", e.getMessage()));
+        }
     }
 
     @DeleteMapping("/{id}")
     public ResponseEntity<?> deleteClient(@PathVariable Long id) {
-        return clientRepository.findById(id)
-                .map(client -> {
-                    client.setActivo(false);
-                    clientRepository.save(client);
-                    return ResponseEntity.ok().build();
-                })
-                .orElse(ResponseEntity.notFound().build());
+        try {
+            clientService.deactivateClient(id);
+            return ResponseEntity.ok(Map.of("status", "EXITO"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", e.getMessage()));
+        }
     }
 }

@@ -41,6 +41,10 @@ Sistema de gestion contable con emision de facturas electronicas oficiales ante 
 | **audit-service** | 8085 | Logs de auditoria en MongoDB |
 | **dashboard-service** | 8086 | Metricas y reportes consolidados |
 | **document-service** | 8087 | Gestion de documentos (upload/download) para tenants y clientes |
+| **ledger-service** | 8088 | Cuenta corriente, honorarios mensuales, pagos y links de pago |
+| **mp-service** | 8089 | Integracion de pagos con MercadoPago |
+| **notification-service** | 8090 | Emails transaccionales y recordatorios |
+| **report-service** | 8091 | Datos para reportes contables |
 
 ## Requisitos
 
@@ -66,6 +70,12 @@ AFIP_ENCRYPTION_KEY=GuidaContable2026SecureKey!
 
 # API Key para comunicacion interna entre microservicios
 INTERNAL_API_KEY=Int3rnalK3yGu1da2026S3gur0!
+
+# Email transaccional
+RESEND_API_KEY=re_xxxxxxxxxxxxxxxxx
+
+# URL publica del frontend usada en emails
+APP_BASE_URL=http://localhost:5173
 ```
 
 ### 2. Levantar los servicios
@@ -103,16 +113,42 @@ El sistema no tiene registro publico. Los estudios contables (tenants) son cread
 
 > Para solicitar acceso a la plataforma, contactar a Guida Pixel.
 
-### Agregar Clientes
+### Gestionar Clientes y Honorarios
+
+Cada estudio contable (tenant) administra exclusivamente sus propios clientes. El backend toma el `tenantId` del JWT y filtra todas las operaciones de clientes por ese tenant.
 
 1. Ir a **Clientes** en el menu lateral
 2. Click en **"Nuevo Cliente"**
 3. Completar:
    - **Razon Social**: Nombre del cliente
-   - **CUIT**: CUIT del cliente
-   - **Email** (opcional)
-   - **Direccion** (opcional)
+   - **CUIT**: CUIT del cliente (se normaliza a 11 digitos, sin guiones ni puntos)
+   - **Email**: email del cliente para crearle acceso y enviar notificaciones
+   - **Telefono** (opcional)
+   - **Condicion IVA** (opcional)
+   - **Honorario mensual**: importe mensual que el estudio le cobra al cliente
 4. Guardar
+
+Al guardar un cliente:
+
+- Se valida que el CUIT tenga 11 digitos y que no exista otro cliente activo con el mismo CUIT dentro del tenant.
+- Si el cliente tiene email, el sistema crea o actualiza un usuario con rol **CLIENT** para que pueda entrar a **Mi Cuenta**.
+- Si tiene honorario mensual mayor a cero, se sincroniza automaticamente un honorario recurrente en `ledger-service`.
+- Si el cliente se desactiva, tambien se desactiva su honorario recurrente.
+
+### Honorarios Mensuales y Cuenta Corriente
+
+El modulo de honorarios usa `ledger-service` para generar cargos mensuales por cliente.
+
+1. El estudio carga o actualiza el **Honorario mensual** desde la ficha del cliente.
+2. `client-service` sincroniza ese monto con `ledger-service` como honorario recurrente.
+3. Al generar honorarios del mes, `ledger-service` crea un movimiento de deuda para cada cliente activo con honorario configurado.
+4. Cada honorario mensual generado queda asociado a `tenantId + clientId + mes`, evitando duplicados por cliente sin bloquear al resto del tenant.
+5. Si el cliente tiene email, `notification-service` le envia un aviso de honorarios generados.
+
+Los pagos de honorarios se cargan desde la cuenta corriente:
+
+- Manualmente, marcando un movimiento como pagado.
+- Mediante link de MercadoPago, si el tenant tiene MP habilitado.
 
 ### Crear Factura Interna (sin AFIP)
 
@@ -160,8 +196,10 @@ Para facturas con validez fiscal (CAE):
 5. Incrementa +1 para el siguiente numero correlativo
 6. Envia la solicitud de CAE (FECAESolicitar)
 7. AFIP responde con CAE, vencimiento y resultado
-8. Si es APROBADA: guarda CAE y numero oficial en ambas bases
-9. Si es RECHAZADA: muestra el error de AFIP
+8. Si es APROBADA: guarda CAE, vencimiento y numero oficial en la factura interna
+9. Se registra el movimiento en cuenta corriente del cliente
+10. Si el cliente tiene email, se envia la notificacion **FACTURA_EMITIDA**
+11. Si es RECHAZADA: muestra el error de AFIP
 ```
 
 #### Resultado exitoso
@@ -249,27 +287,91 @@ Parametros de upload:
 
 ### Clientes
 
+Todas las operaciones usan el `tenantId` del JWT. No se debe enviar `tenantId` desde el frontend para crear o editar clientes.
+
 | Metodo | Endpoint | Descripcion |
 |---|---|---|
-| GET | `/api/v1/clients` | Listar clientes |
-| POST | `/api/v1/clients` | Crear cliente |
-| PUT | `/api/v1/clients/{id}` | Actualizar cliente |
-| DELETE | `/api/v1/clients/{id}` | Eliminar cliente |
+| GET | `/api/v1/clients` | Listar clientes activos del tenant |
+| GET | `/api/v1/clients/count` | Contar clientes activos del tenant |
+| GET | `/api/v1/clients/{id}` | Obtener detalle de cliente del tenant |
+| POST | `/api/v1/clients` | Crear cliente y sincronizar honorario recurrente |
+| PUT | `/api/v1/clients/{id}` | Actualizar cliente y honorario mensual |
+| DELETE | `/api/v1/clients/{id}` | Desactivar cliente y su honorario recurrente |
+
+Ejemplo de cliente:
+
+```json
+{
+  "razonSocial": "Cliente SRL",
+  "cuit": "30-12345678-9",
+  "email": "cliente@empresa.com",
+  "telefono": "1122334455",
+  "condicionIVA": "Responsable Inscripto",
+  "honorarioMensual": 50000
+}
+```
 
 ### Facturas
 
 | Metodo | Endpoint | Descripcion |
 |---|---|---|
 | POST | `/api/v1/invoices` | Crear factura (+ AFIP si `emitirAfip: true`) |
+| GET | `/api/v1/invoices` | Listar facturas del tenant |
+| GET | `/api/v1/invoices/{id}` | Obtener factura por id, validando tenant |
+| POST | `/api/v1/invoices/emitir` | Emitir en AFIP una factura existente (`{"invoiceId": 1}`) |
+| POST | `/api/v1/invoices/{id}/anular` | Anular factura no emitida en AFIP |
 | GET | `/api/v1/invoices/total-facturado` | Total facturado |
+
+Si la factura se emite correctamente en AFIP y el cliente tiene email, el sistema envia un email con numero de factura, monto y CAE.
 
 ### AFIP
 
 | Metodo | Endpoint | Descripcion |
 |---|---|---|
-| GET | `/api/afip/test-token` | Test de conexion con AFIP |
-| GET | `/api/afip/ultimo-comprobante` | Ultimo nro autorizado |
+| POST | `/api/afip/test-token` | Test de conexion con AFIP usando la config del tenant |
+| POST | `/api/afip/ultimo-comprobante` | Consultar ultimo nro autorizado por punto de venta/tipo |
 | POST | `/api/afip/emitir` | Emitir factura directa en AFIP |
+
+### Cuenta Corriente, Honorarios y Pagos
+
+| Metodo | Endpoint | Descripcion |
+|---|---|---|
+| GET | `/api/v1/ledger/clients/{clientId}/movements` | Movimientos de cuenta corriente del cliente |
+| GET | `/api/v1/ledger/clients/{clientId}/balance` | Saldo/deuda del cliente |
+| POST | `/api/v1/ledger/clients/{clientId}/movements` | Crear cargo o pago manual |
+| PUT | `/api/v1/ledger/movements/{id}/mark-paid` | Marcar un movimiento como pagado |
+| POST | `/api/v1/ledger/movements/{id}/payment-link` | Crear link de pago de MercadoPago |
+| GET | `/api/v1/ledger/my/movements` | Movimientos del cliente autenticado (rol CLIENT) |
+| GET | `/api/v1/ledger/my/balance` | Saldo del cliente autenticado (rol CLIENT) |
+
+### Honorarios Recurrentes
+
+| Metodo | Endpoint | Descripcion |
+|---|---|---|
+| GET | `/api/v1/fees/clients/{clientId}/recurring` | Ver honorario recurrente del cliente |
+| POST | `/api/v1/fees/clients/{clientId}/recurring` | Crear honorario recurrente |
+| PUT | `/api/v1/fees/clients/{clientId}/recurring` | Actualizar honorario recurrente |
+| DELETE | `/api/v1/fees/clients/{clientId}/recurring` | Desactivar honorario recurrente |
+| POST | `/api/v1/fees/generate-now` | Generar honorarios del mes actual para el tenant |
+
+> Normalmente no hace falta llamar manualmente a los endpoints de honorarios: al editar el `honorarioMensual` de un cliente, `client-service` lo sincroniza automaticamente con `ledger-service`.
+
+### Notificaciones Internas
+
+`notification-service` expone endpoints internos usados por otros servicios. Deben llamarse con `X-Internal-Key`.
+
+| Metodo | Endpoint | Descripcion |
+|---|---|---|
+| POST | `/api/internal/notifications/send` | Enviar email con template transaccional |
+
+Templates relevantes:
+
+- `BIENVENIDA_USUARIO`: acceso inicial para usuarios ADMIN/STAFF/CLIENT.
+- `HONORARIO_GENERADO`: aviso mensual de honorarios.
+- `FACTURA_EMITIDA`: aviso de factura emitida con CAE.
+- `LINK_PAGO_MP`: link de pago.
+- `PAGO_CONFIRMADO`: confirmacion de pago.
+- `VENCIMIENTO_PROXIMO` y `DEUDA_VENCIDA`: recordatorios de deuda.
 
 ## Ejemplo: Emitir factura via API
 
@@ -290,6 +392,8 @@ curl -X POST http://localhost:8080/api/v1/invoices \
     "puntoVenta": 1,
     "tipoDocumento": 80,
     "numeroDocumento": 30123456789,
+    "nombreCliente": "Cliente SRL",
+    "clientEmail": "cliente@empresa.com",
     "condicionIvaReceptorId": 5,
     "concepto": 1,
     "items": [
@@ -488,9 +592,12 @@ Los clientes del estudio tienen acceso a una pagina personalizada donde pueden:
 
 - Ver resumen de facturas pendientes y pagadas
 - Ver total de deuda con el estudio
-- Ver ultimos movimientos (honorarios, pagos, etc.)
+- Ver ultimos movimientos (honorarios, pagos, facturas, etc.)
+- Abrir links de pago si el estudio usa MercadoPago
 - Acceder a sus documentos compartidos por el estudio
 - Subir documentos para su contador
+
+El JWT de un usuario con rol **CLIENT** incluye `clientId`; por eso los endpoints `/api/v1/ledger/my/movements` y `/api/v1/ledger/my/balance` muestran solo la cuenta corriente de ese cliente dentro de su tenant.
 
 ## Solucion de Problemas
 
@@ -528,12 +635,16 @@ Revisar el mensaje de error que devuelve AFIP. Causas comunes:
 contable-api/
 ├── api-gateway/          # Spring Cloud Gateway + filtro de subscripciones
 ├── auth-service/         # Autenticacion, tenants, subscripciones y roles
-├── client-service/       # CRUD clientes
-├── invoice-service/      # Facturas + integracion AFIP
+├── client-service/       # CRUD clientes + sincronizacion de honorarios
+├── invoice-service/      # Facturas + integracion AFIP + emails de factura
 ├── afip-service/         # Comunicacion con webservices AFIP
 ├── audit-service/        # Auditoria (MongoDB)
 ├── dashboard-service/    # Metricas y reportes
 ├── document-service/     # Gestion de documentos (upload/download)
+├── ledger-service/       # Cuenta corriente, honorarios y pagos
+├── mp-service/           # MercadoPago
+├── notification-service/ # Emails transaccionales
+├── report-service/       # Reportes
 ├── shared/               # Libreria compartida (JWT, BaseEntity, etc.)
 ├── docker-compose.yml    # Orquestacion de servicios
 └── .env                  # Variables de entorno (no versionado)
@@ -567,3 +678,5 @@ guida-frontend/
 | Auth | JWT (HS384), Spring Security, roles jerarquicos |
 | Infra | Docker, Docker Compose |
 | AFIP | WSAA (autenticacion), WSFEv1 (facturacion) |
+| Emails | Resend + templates HTML transaccionales |
+| Pagos | MercadoPago + cuenta corriente en ledger-service |

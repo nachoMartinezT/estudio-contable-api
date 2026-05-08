@@ -96,7 +96,7 @@ public class AuthService {
             permissions = adminService.getStaffPermissions(user.getId());
         }
 
-        var jwtToken = jwtService.generateToken(user, user.getTenantId(), permissions);
+        var jwtToken = jwtService.generateToken(user, user.getTenantId(), permissions, user.getClientId());
 
         return AuthenticationResponse.builder()
                 .token(jwtToken)

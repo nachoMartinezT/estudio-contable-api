@@ -1,8 +1,10 @@
 package com.guidapixel.contable.ledger.web;
 
 import com.guidapixel.contable.ledger.service.LedgerService;
+import com.guidapixel.contable.ledger.service.RecurringFeeService;
 import com.guidapixel.contable.ledger.web.dto.InvoiceMovementRequest;
 import com.guidapixel.contable.ledger.web.dto.MovementResponse;
+import com.guidapixel.contable.ledger.web.dto.RecurringFeeRequest;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -15,12 +17,34 @@ import java.util.Map;
 public class InternalLedgerController {
 
     private final LedgerService ledgerService;
+    private final RecurringFeeService recurringFeeService;
 
     @PostMapping("/movements/from-invoice")
     public ResponseEntity<?> createMovementFromInvoice(@RequestBody InvoiceMovementRequest request) {
         try {
             MovementResponse response = ledgerService.createMovementFromInvoice(request);
             return ResponseEntity.ok(Map.of("status", "EXITO", "movement", response));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/recurring-fees/sync")
+    public ResponseEntity<?> syncRecurringFee(@RequestBody Map<String, Object> request) {
+        try {
+            Long tenantId = ((Number) request.get("tenantId")).longValue();
+            Long clientId = ((Number) request.get("clientId")).longValue();
+            Number amount = (Number) request.get("baseAmount");
+            RecurringFeeRequest recurringRequest = RecurringFeeRequest.builder()
+                    .baseAmount(amount != null ? new java.math.BigDecimal(amount.toString()) : java.math.BigDecimal.ZERO)
+                    .active(Boolean.TRUE.equals(request.get("active")))
+                    .clientEmail((String) request.get("clientEmail"))
+                    .clientName((String) request.get("clientName"))
+                    .build();
+            return ResponseEntity.ok(Map.of(
+                    "status", "EXITO",
+                    "recurringFee", recurringFeeService.createOrUpdateRecurringFee(tenantId, clientId, recurringRequest)
+            ));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", e.getMessage()));
         }

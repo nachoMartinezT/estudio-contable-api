@@ -2,7 +2,9 @@ package com.guidapixel.contable.invoice.service;
 
 import com.guidapixel.contable.invoice.client.AfipClient;
 import com.guidapixel.contable.invoice.client.AfipFacturaRequest;
+import com.guidapixel.contable.invoice.client.ClientInfoClient;
 import com.guidapixel.contable.invoice.client.LedgerClient;
+import com.guidapixel.contable.invoice.client.NotificationClient;
 import com.guidapixel.contable.invoice.domain.model.Invoice;
 import com.guidapixel.contable.invoice.domain.model.InvoiceItem;
 import com.guidapixel.contable.invoice.domain.repository.InvoiceRepository;
@@ -30,6 +32,8 @@ public class InvoiceService {
     private final InvoiceRepository invoiceRepository;
     private final AfipClient afipClient;
     private final LedgerClient ledgerClient;
+    private final NotificationClient notificationClient;
+    private final ClientInfoClient clientInfoClient;
 
     @Transactional
     public Invoice createInvoice(InvoiceRequest request) {
@@ -63,6 +67,7 @@ public class InvoiceService {
 
         if (request.isEmitirAfip()) {
             emitirEnAfip(invoice, request);
+            sendInvoiceEmail(invoice, request, tenantId);
         }
 
         Invoice savedInvoice = invoiceRepository.save(invoice);

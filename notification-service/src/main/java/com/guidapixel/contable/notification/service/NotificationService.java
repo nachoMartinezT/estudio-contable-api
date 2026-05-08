@@ -49,6 +49,11 @@ public class NotificationService {
                 subject = "Honorarios " + mes + " - " + request.getTenantName();
                 htmlContent = emailService.buildHonorarioGenerado(request.getVariables());
             }
+            case "FACTURA_EMITIDA" -> {
+                String numero = request.getVariables().getOrDefault("numeroFactura", "");
+                subject = "Factura " + numero + " - " + request.getTenantName();
+                htmlContent = emailService.buildFacturaEmitida(request.getVariables());
+            }
             case "DEUDA_VENCIDA" -> {
                 String dias = request.getVariables().getOrDefault("diasVencido", "0");
                 subject = "Pago vencido - " + request.getTenantName();
