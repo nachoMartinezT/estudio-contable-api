@@ -132,6 +132,26 @@ public class InvoiceService {
                 invoice.getCae(), invoice.getNumeroFactura());
     }
 
+    private void sendInvoiceEmail(Invoice invoice, InvoiceRequest request, Long tenantId) {
+        try {
+            var clientOpt = clientInfoClient.getClient(tenantId, invoice.getClientId());
+            if (clientOpt.isPresent()) {
+                var client = clientOpt.get();
+                String email = (String) client.get("email");
+                String name = (String) client.getOrDefault("razonSocial", "Cliente");
+
+                notificationClient.sendFacturaEmitida(email, name, tenantId, Map.of(
+                        "numeroFactura", invoice.getNumeroFactura(),
+                        "total", invoice.getTotal() != null ? invoice.getTotal().toString() : "0",
+                        "cae", invoice.getCae() != null ? invoice.getCae() : "",
+                        "fechaEmision", invoice.getFechaEmision() != null ? invoice.getFechaEmision().toString() : ""
+                ));
+            }
+        } catch (Exception e) {
+            log.warn("Error enviando email de factura: {}", e.getMessage());
+        }
+    }
+
     private LocalDate parseAfipDate(Object value) {
         if (value == null) {
             throw new RuntimeException("AFIP no informo vencimiento de CAE");
