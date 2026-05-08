@@ -27,7 +27,7 @@ public class AfipController {
     public Map<String, String> testConnection(@RequestBody TenantIdRequest request) {
         try {
             TenantAfipConfig tenantConfig = authTenantClient.getTenantAfipConfig(request.getTenantId());
-            Map<String, String> credenciales = afipAuthService.getAfipToken(tenantConfig);
+            Map<String, String> credenciales = new java.util.HashMap<>(afipAuthService.getAfipToken(tenantConfig));
             credenciales.put("status", "EXITO");
             credenciales.put("mensaje", "Conexion con AFIP exitosa!");
             return credenciales;

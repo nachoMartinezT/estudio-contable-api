@@ -22,21 +22,26 @@ import java.security.Security;
 import java.security.cert.X509Certificate;
 import java.time.OffsetDateTime;
 import java.time.format.DateTimeFormatter;
+import java.time.format.DateTimeParseException;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 @Service
 public class AfipAuthService {
 
-    @Value("${afip.wsaa.url:https://wsaahomo.afip.gov.ar/ws/services/LoginCms}")
-    private String wsaaUrl;
+    @Value("${afip.wsaa.homologacion-url:https://wsaahomo.afip.gov.ar/ws/services/LoginCms}")
+    private String wsaaHomologacionUrl;
 
-    private final Map<Long, TenantTokenCache> tokenCache = new HashMap<>();
+    @Value("${afip.wsaa.produccion-url:https://wsaa.afip.gov.ar/ws/services/LoginCms}")
+    private String wsaaProduccionUrl;
+
+    private final Map<String, TenantTokenCache> tokenCache = new ConcurrentHashMap<>();
 
     public Map<String, String> getAfipToken(TenantAfipConfig tenantConfig) throws Exception {
-        Long tenantId = tenantConfig.getTenantId();
-        TenantTokenCache cache = tokenCache.get(tenantId);
+        String cacheKey = buildCacheKey(tenantConfig);
+        TenantTokenCache cache = tokenCache.get(cacheKey);
 
         if (cache != null && System.currentTimeMillis() < cache.expirationTime) {
             return cache.credentials;
@@ -44,15 +49,15 @@ public class AfipAuthService {
 
         byte[] loginTicketRequest = createLoginTicketRequest();
         byte[] signedCms = signRequest(loginTicketRequest, tenantConfig);
-        String responseXml = invokeWsaa(signedCms);
+        String responseXml = invokeWsaa(signedCms, tenantConfig);
 
-        Map<String, String> credentials = parseResponse(responseXml);
-        tokenCache.put(tenantId, new TenantTokenCache(
-                credentials,
-                System.currentTimeMillis() + (10 * 60 * 60 * 1000)
+        ParsedLoginTicket loginTicket = parseResponse(responseXml);
+        tokenCache.put(cacheKey, new TenantTokenCache(
+                loginTicket.credentials(),
+                loginTicket.cacheExpirationEpochMillis()
         ));
 
-        return credentials;
+        return loginTicket.credentials();
     }
 
     private byte[] createLoginTicketRequest() {
@@ -104,7 +109,7 @@ public class AfipAuthService {
         return signedData.getEncoded();
     }
 
-    private String invokeWsaa(byte[] signedCms) throws Exception {
+    private String invokeWsaa(byte[] signedCms, TenantAfipConfig tenantConfig) throws Exception {
         String cmsBase64 = Base64.getEncoder().encodeToString(signedCms);
 
         String soapXml = "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:ser=\"http://wsaa.view.sua.dirstra.afip.gov.ar/LoginCms\">" +
@@ -118,7 +123,7 @@ public class AfipAuthService {
 
         HttpClient client = HttpClient.newHttpClient();
         HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(wsaaUrl))
+                .uri(URI.create(resolveWsaaUrl(tenantConfig)))
                 .header("Content-Type", "text/xml;charset=UTF-8")
                 .header("SOAPAction", "")
                 .POST(HttpRequest.BodyPublishers.ofString(soapXml))
@@ -132,7 +137,7 @@ public class AfipAuthService {
         return response.body();
     }
 
-    private Map<String, String> parseResponse(String xml) {
+    private ParsedLoginTicket parseResponse(String xml) {
         String cleanXml = xml
                 .replace("&lt;", "<")
                 .replace("&gt;", ">")
@@ -149,7 +154,34 @@ public class AfipAuthService {
         } else {
             throw new RuntimeException("No se pudo leer el Token del XML. XML Limpio: " + cleanXml);
         }
-        return creds;
+
+        long cacheExpiration = extractCacheExpiration(cleanXml);
+        return new ParsedLoginTicket(Collections.unmodifiableMap(creds), cacheExpiration);
+    }
+
+    private long extractCacheExpiration(String cleanXml) {
+        Matcher expirationMatcher = Pattern.compile("(?s)<expirationTime>(.*?)</expirationTime>").matcher(cleanXml);
+        if (!expirationMatcher.find()) {
+            return System.currentTimeMillis() + (9 * 60 * 1000);
+        }
+
+        try {
+            OffsetDateTime expirationTime = OffsetDateTime.parse(expirationMatcher.group(1));
+            return expirationTime.minusMinutes(1).toInstant().toEpochMilli();
+        } catch (DateTimeParseException ex) {
+            return System.currentTimeMillis() + (9 * 60 * 1000);
+        }
+    }
+
+    private String resolveWsaaUrl(TenantAfipConfig tenantConfig) {
+        return tenantConfig.isAfipHomologacion() ? wsaaHomologacionUrl : wsaaProduccionUrl;
+    }
+
+    private String buildCacheKey(TenantAfipConfig tenantConfig) {
+        return tenantConfig.getTenantId() + ":" + (tenantConfig.isAfipHomologacion() ? "homo" : "prod");
+    }
+
+    private record ParsedLoginTicket(Map<String, String> credentials, long cacheExpirationEpochMillis) {
     }
 
     private static class TenantTokenCache {

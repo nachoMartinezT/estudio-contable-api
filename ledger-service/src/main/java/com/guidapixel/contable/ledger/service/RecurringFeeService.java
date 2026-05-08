@@ -66,6 +66,15 @@ public class RecurringFeeService {
         if (request.getActive() != null) {
             fee.setActive(request.getActive());
         }
+        if (request.getDayOfMonth() != null) {
+            fee.setDayOfMonth(Math.max(1, Math.min(28, request.getDayOfMonth())));
+        }
+        if (request.getClientEmail() != null) {
+            fee.setClientEmail(request.getClientEmail());
+        }
+        if (request.getClientName() != null) {
+            fee.setClientName(request.getClientName());
+        }
 
         fee.setTenantId(tenantId);
 
@@ -128,9 +137,8 @@ public class RecurringFeeService {
         int generated = 0;
         for (RecurringFee fee : activeFees) {
             try {
-                if (isAlreadyGenerated(fee.getTenantId(), yearMonth)) {
+                if (isAlreadyGenerated(fee.getTenantId(), fee.getClientId(), yearMonth)) {
                     log.info("Honorario ya generado para cliente {} en {}", fee.getClientId(), yearMonth);
-                    logFeeGeneration(fee.getTenantId(), fee.getClientId(), yearMonth, BigDecimal.ZERO, true, "Ya generado");
                     continue;
                 }
 
@@ -144,6 +152,8 @@ public class RecurringFeeService {
                 AccountMovement movement = AccountMovement.builder()
                         .tenantId(fee.getTenantId())
                         .clientId(fee.getClientId())
+                        .clientEmail(fee.getClientEmail())
+                        .clientName(fee.getClientName())
                         .type(MovementType.CARGO_MANUAL)
                         .amount(amount)
                         .direction(MovementDirection.DEBIT)
@@ -217,14 +227,26 @@ public class RecurringFeeService {
         }
     }
 
-    public boolean isAlreadyGenerated(Long tenantId, String yearMonth) {
-        return feeGenerationLogRepository.findByTenantIdAndYearMonthAndSuccessTrue(tenantId, yearMonth).isPresent();
+    public boolean isAlreadyGenerated(Long tenantId, Long clientId, String yearMonth) {
+        return feeGenerationLogRepository.findByTenantIdAndClientIdAndYearMonth(tenantId, clientId, yearMonth).stream()
+                .anyMatch(FeeGenerationLog::isSuccess);
+    }
+
+    public boolean isTenantMonthAlreadyGenerated(Long tenantId, String yearMonth) {
+        List<RecurringFee> activeFees = recurringFeeRepository.findByTenantIdAndActiveTrue(tenantId);
+        if (activeFees.isEmpty()) {
+            return false;
+        }
+        return activeFees.stream()
+                .allMatch(fee -> isAlreadyGenerated(tenantId, fee.getClientId(), yearMonth));
     }
 
     private RecurringFeeResponse toResponse(RecurringFee fee) {
         return RecurringFeeResponse.builder()
                 .id(fee.getId())
                 .clientId(fee.getClientId())
+                .clientEmail(fee.getClientEmail())
+                .clientName(fee.getClientName())
                 .baseAmount(fee.getBaseAmount())
                 .active(fee.isActive())
                 .dayOfMonth(fee.getDayOfMonth())

@@ -26,8 +26,15 @@ public class JwtService {
     }
 
     public String generateToken(UserDetails userDetails, Long tenantId, List<String> permissions) {
+        return generateToken(userDetails, tenantId, permissions, null);
+    }
+
+    public String generateToken(UserDetails userDetails, Long tenantId, List<String> permissions, Long clientId) {
         Map<String, Object> extraClaims = new HashMap<>();
         extraClaims.put("tenantId", tenantId);
+        if (clientId != null) {
+            extraClaims.put("clientId", clientId);
+        }
 
         String role = userDetails.getAuthorities().stream()
                 .findFirst()
@@ -88,6 +95,19 @@ public class JwtService {
 
     public Long extractTenantId(String token) {
         return extractClaim(token, claims -> claims.get("tenantId", Long.class));
+    }
+
+    public Long extractClientId(String token) {
+        return extractClaim(token, claims -> {
+            Object clientId = claims.get("clientId");
+            if (clientId instanceof Number number) {
+                return number.longValue();
+            }
+            if (clientId instanceof String value && !value.isBlank()) {
+                return Long.parseLong(value);
+            }
+            return null;
+        });
     }
 
     private boolean isTokenExpired(String token) {

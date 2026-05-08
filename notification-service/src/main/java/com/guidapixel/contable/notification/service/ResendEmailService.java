@@ -281,6 +281,47 @@ public class ResendEmailService {
             """.formatted(nombreCliente, nombreEstudio, nombreArchivo, categoria, descripcion, portalUrl);
     }
 
+
+    public String buildFacturaEmitida(Map<String, String> vars) {
+        String nombreEstudio = vars.getOrDefault("nombreEstudio", "Estudio");
+        String nombreCliente = vars.getOrDefault("nombreCliente", "Cliente");
+        String numeroFactura = vars.getOrDefault("numeroFactura", "");
+        String cae = vars.getOrDefault("cae", "");
+        String monto = vars.getOrDefault("monto", "0");
+        String fechaEmision = vars.getOrDefault("fechaEmision", "");
+
+        return """
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="UTF-8"></head>
+            <body style="margin:0;padding:0;font-family:Arial,sans-serif;background-color:#f4f4f4;">
+                <table width="100%%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:20px 0;">
+                    <tr><td align="center">
+                        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 4px rgba(0,0,0,0.1);">
+                            <tr><td style="background-color:#0f766e;padding:24px;text-align:center;">
+                                <h1 style="color:#ffffff;margin:0;font-size:22px;">Factura emitida</h1>
+                            </td></tr>
+                            <tr><td style="padding:32px 24px;color:#333333;font-size:15px;line-height:1.6;">
+                                <p>Hola <strong>%s</strong>,</p>
+                                <p><strong>%s</strong> emitio una factura a tu nombre.</p>
+                                <table width="100%%" cellpadding="12" cellspacing="0" style="background-color:#f8fafc;border:1px solid #e2e8f0;border-radius:6px;margin:16px 0;">
+                                    <tr><td style="color:#64748b;font-size:13px;">Factura</td><td style="color:#1e293b;font-weight:bold;font-size:14px;">%s</td></tr>
+                                    <tr><td style="color:#64748b;font-size:13px;">Fecha</td><td style="color:#1e293b;font-size:14px;">%s</td></tr>
+                                    <tr><td style="color:#64748b;font-size:13px;">Monto</td><td style="color:#1e293b;font-weight:bold;font-size:14px;">$%s</td></tr>
+                                    <tr><td style="color:#64748b;font-size:13px;">CAE</td><td style="color:#1e293b;font-size:14px;">%s</td></tr>
+                                </table>
+                            </td></tr>
+                            <tr><td style="background-color:#f8fafc;padding:16px;text-align:center;color:#94a3b8;font-size:12px;border-top:1px solid #e2e8f0;">
+                                Powered by Guida Contable | guidapixel.com
+                            </td></tr>
+                        </table>
+                    </td></tr>
+                </table>
+            </body>
+            </html>
+            """.formatted(nombreCliente, nombreEstudio, numeroFactura, fechaEmision, monto, cae);
+    }
+
     public String buildHonorarioGenerado(Map<String, String> vars) {
         String nombreEstudio = vars.getOrDefault("nombreEstudio", "Estudio");
         String nombreCliente = vars.getOrDefault("nombreCliente", "Cliente");

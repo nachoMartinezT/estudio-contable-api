@@ -15,6 +15,8 @@ import java.time.LocalDateTime;
 public class RecurringFeeResponse {
     private Long id;
     private Long clientId;
+    private String clientEmail;
+    private String clientName;
     private BigDecimal baseAmount;
     private boolean active;
     private int dayOfMonth;

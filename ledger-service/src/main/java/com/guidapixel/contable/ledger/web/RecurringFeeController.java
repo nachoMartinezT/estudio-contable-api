@@ -150,7 +150,7 @@ public class RecurringFeeController {
 
             String yearMonth = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyy-MM"));
 
-            if (recurringFeeService.isAlreadyGenerated(tenantId, yearMonth)) {
+            if (recurringFeeService.isTenantMonthAlreadyGenerated(tenantId, yearMonth)) {
                 return ResponseEntity.status(409).body(Map.of(
                         "status", "ERROR",
                         "error", "Los honorarios de " + yearMonth + " ya fueron generados para este estudio"

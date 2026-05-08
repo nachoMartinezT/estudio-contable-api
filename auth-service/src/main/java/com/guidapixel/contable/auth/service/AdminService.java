@@ -228,7 +228,25 @@ public class AdminService {
         if (request.getRole() == Role.ADMIN) {
             throw new RuntimeException("Solo puede haber un ADMIN por tenant");
         }
-        if (userRepository.findByEmail(request.getEmail()).isPresent()) {
+        var existingUser = userRepository.findByEmail(request.getEmail());
+        if (existingUser.isPresent()) {
+            User user = existingUser.get();
+            if (!tenantId.equals(user.getTenantId())) {
+                throw new RuntimeException("Ya existe un usuario con ese email en otro tenant");
+            }
+            if (request.getRole() == Role.CLIENT) {
+                user.setNombre(request.getNombre());
+                user.setApellido(request.getApellido());
+                user.setClientId(request.getClientId());
+                userRepository.save(user);
+                return Map.of(
+                        "status", "EXITO",
+                        "userId", user.getId(),
+                        "email", request.getEmail(),
+                        "role", user.getRole().name(),
+                        "message", "Usuario CLIENT actualizado"
+                );
+            }
             throw new RuntimeException("Ya existe un usuario con ese email");
         }
 

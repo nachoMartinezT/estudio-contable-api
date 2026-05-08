@@ -20,6 +20,7 @@ public class InvoiceRequest {
     private Integer tipoDocumento;
     private Long numeroDocumento;
     private String nombreCliente;
+    private String clientEmail;
     private Integer condicionIvaReceptorId;
     private Integer concepto;
     private LocalDate fechaServicioDesde;

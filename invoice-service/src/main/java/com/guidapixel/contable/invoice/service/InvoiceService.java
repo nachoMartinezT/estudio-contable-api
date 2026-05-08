@@ -2,7 +2,9 @@ package com.guidapixel.contable.invoice.service;
 
 import com.guidapixel.contable.invoice.client.AfipClient;
 import com.guidapixel.contable.invoice.client.AfipFacturaRequest;
+import com.guidapixel.contable.invoice.client.ClientInfoClient;
 import com.guidapixel.contable.invoice.client.LedgerClient;
+import com.guidapixel.contable.invoice.client.NotificationClient;
 import com.guidapixel.contable.invoice.domain.model.Invoice;
 import com.guidapixel.contable.invoice.domain.model.InvoiceItem;
 import com.guidapixel.contable.invoice.domain.repository.InvoiceRepository;
@@ -16,6 +18,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.Map;
 
 @Slf4j
@@ -23,9 +27,13 @@ import java.util.Map;
 @RequiredArgsConstructor
 public class InvoiceService {
 
+    private static final DateTimeFormatter AFIP_DATE = DateTimeFormatter.BASIC_ISO_DATE;
+
     private final InvoiceRepository invoiceRepository;
     private final AfipClient afipClient;
     private final LedgerClient ledgerClient;
+    private final NotificationClient notificationClient;
+    private final ClientInfoClient clientInfoClient;
 
     @Transactional
     public Invoice createInvoice(InvoiceRequest request) {
@@ -59,6 +67,7 @@ public class InvoiceService {
 
         if (request.isEmitirAfip()) {
             emitirEnAfip(invoice, request);
+            sendInvoiceEmail(invoice, request, tenantId);
         }
 
         Invoice savedInvoice = invoiceRepository.save(invoice);
@@ -111,15 +120,57 @@ public class InvoiceService {
         Map<String, Object> resultado = afipClient.emitirFactura(afipRequest, tenantId);
 
         invoice.setCae((String) resultado.get("cae"));
-        invoice.setVencimientoCae(java.time.LocalDate.parse((String) resultado.get("vencimiento_cae")));
-        invoice.setNroComprobanteAfip(Integer.parseInt((String) resultado.get("numero_comprobante")));
+        invoice.setVencimientoCae(parseAfipDate(resultado.get("vencimiento_cae")));
+        invoice.setNroComprobanteAfip(toInteger(resultado.get("numero_comprobante")));
         invoice.setEstadoAfip((String) resultado.get("estado"));
+        invoice.setEstado("EMITIDA_AFIP");
         invoice.setNumeroFactura(String.format("%04d-%08d",
                 invoice.getPuntoVenta(),
                 invoice.getNroComprobanteAfip()));
 
         log.info("Factura emitida en AFIP exitosamente. CAE: {}, Nro: {}",
                 invoice.getCae(), invoice.getNumeroFactura());
+    }
+
+    private void sendInvoiceEmail(Invoice invoice, InvoiceRequest request, Long tenantId) {
+        Map<String, Object> clientInfo = clientInfoClient.getClient(tenantId, request.getClientId()).orElse(Map.of());
+        String clientEmail = request.getClientEmail() != null && !request.getClientEmail().isBlank()
+                ? request.getClientEmail()
+                : (String) clientInfo.getOrDefault("email", "");
+        String clientName = request.getNombreCliente() != null && !request.getNombreCliente().isBlank()
+                ? request.getNombreCliente()
+                : (String) clientInfo.getOrDefault("razonSocial", "Cliente");
+
+        notificationClient.sendFacturaEmitida(
+                clientEmail,
+                clientName,
+                tenantId,
+                Map.of(
+                        "nombreEstudio", "Estudio",
+                        "nombreCliente", clientName,
+                        "numeroFactura", invoice.getNumeroFactura() != null ? invoice.getNumeroFactura() : "",
+                        "cae", invoice.getCae() != null ? invoice.getCae() : "",
+                        "monto", invoice.getTotal() != null ? invoice.getTotal().toString() : "0",
+                        "fechaEmision", invoice.getFechaEmision() != null ? invoice.getFechaEmision().toString() : ""
+                )
+        );
+    }
+
+    private LocalDate parseAfipDate(Object value) {
+        if (value == null) {
+            throw new RuntimeException("AFIP no informo vencimiento de CAE");
+        }
+        return LocalDate.parse(value.toString(), AFIP_DATE);
+    }
+
+    private Integer toInteger(Object value) {
+        if (value instanceof Number number) {
+            return number.intValue();
+        }
+        if (value != null) {
+            return Integer.parseInt(value.toString());
+        }
+        throw new RuntimeException("AFIP no informo numero de comprobante");
     }
 
     public Page<Invoice> getInvoicesByTenant(Long tenantId, String estado, Pageable pageable) {

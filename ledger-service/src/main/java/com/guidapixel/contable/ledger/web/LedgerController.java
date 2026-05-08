@@ -21,6 +21,7 @@ import java.util.Map;
 public class LedgerController {
 
     private final LedgerService ledgerService;
+    private final com.guidapixel.contable.shared.security.JwtService jwtService;
 
     @GetMapping("/clients/{clientId}/movements")
     public ResponseEntity<?> getMovements(
@@ -80,31 +81,39 @@ public class LedgerController {
 
     @GetMapping("/my/movements")
     public ResponseEntity<?> getMyMovements(
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size
     ) {
         try {
-            Long tenantId = TenantContext.getTenantId();
-            if (tenantId == null) {
-                return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", "No se pudo determinar el tenant"));
-            }
+            Long clientId = extractClientId(authHeader);
             Pageable pageable = PageRequest.of(page, size, Sort.by("createdAt").descending());
-            return ResponseEntity.ok(ledgerService.getMyMovements(tenantId, pageable));
+            return ResponseEntity.ok(ledgerService.getMyMovements(clientId, pageable));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", e.getMessage()));
         }
     }
 
     @GetMapping("/my/balance")
-    public ResponseEntity<?> getMyBalance() {
+    public ResponseEntity<?> getMyBalance(
+            @RequestHeader(value = "Authorization", required = false) String authHeader
+    ) {
         try {
-            Long tenantId = TenantContext.getTenantId();
-            if (tenantId == null) {
-                return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", "No se pudo determinar el tenant"));
-            }
-            return ResponseEntity.ok(ledgerService.getMyBalance(tenantId));
+            Long clientId = extractClientId(authHeader);
+            return ResponseEntity.ok(ledgerService.getMyBalance(clientId));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", e.getMessage()));
         }
+    }
+
+    private Long extractClientId(String authHeader) {
+        if (authHeader == null || !authHeader.startsWith("Bearer ")) {
+            throw new IllegalStateException("No se pudo determinar el cliente autenticado");
+        }
+        Long clientId = jwtService.extractClientId(authHeader.substring(7));
+        if (clientId == null) {
+            throw new IllegalStateException("El usuario autenticado no esta asociado a un cliente");
+        }
+        return clientId;
     }
 }
