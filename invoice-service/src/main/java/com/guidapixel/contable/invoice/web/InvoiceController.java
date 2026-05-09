@@ -2,6 +2,7 @@ package com.guidapixel.contable.invoice.web;
 
 import com.guidapixel.contable.invoice.domain.model.Invoice;
 import com.guidapixel.contable.invoice.service.InvoiceService;
+import com.guidapixel.contable.invoice.web.dto.EmitirRequest;
 import com.guidapixel.contable.invoice.web.dto.InvoiceRequest;
 import com.guidapixel.contable.shared.multitenancy.TenantContext;
 import lombok.RequiredArgsConstructor;
@@ -62,10 +63,9 @@ public class InvoiceController {
     }
 
     @PostMapping("/emitir")
-    public ResponseEntity<?> emitir(@RequestBody Map<String, Long> request) {
+    public ResponseEntity<?> emitir(@RequestBody EmitirRequest request) {
         try {
-            Long invoiceId = request.get("invoiceId");
-            Invoice invoice = invoiceService.emitirFactura(invoiceId);
+            Invoice invoice = invoiceService.emitirFactura(request);
             return ResponseEntity.ok(Map.of("status", "OK", "invoice", invoice));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", e.getMessage()));

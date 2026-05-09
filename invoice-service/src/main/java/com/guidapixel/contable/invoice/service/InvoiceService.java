@@ -8,6 +8,7 @@ import com.guidapixel.contable.invoice.client.NotificationClient;
 import com.guidapixel.contable.invoice.domain.model.Invoice;
 import com.guidapixel.contable.invoice.domain.model.InvoiceItem;
 import com.guidapixel.contable.invoice.domain.repository.InvoiceRepository;
+import com.guidapixel.contable.invoice.web.dto.EmitirRequest;
 import com.guidapixel.contable.invoice.web.dto.InvoiceRequest;
 import com.guidapixel.contable.shared.multitenancy.TenantContext;
 import lombok.RequiredArgsConstructor;
@@ -187,9 +188,9 @@ public class InvoiceService {
     }
 
     @Transactional
-    public Invoice emitirFactura(Long invoiceId) {
+    public Invoice emitirFactura(EmitirRequest request) {
         Long tenantId = TenantContext.getTenantId();
-        Invoice invoice = invoiceRepository.findById(invoiceId)
+        Invoice invoice = invoiceRepository.findById(request.getInvoiceId())
                 .orElseThrow(() -> new RuntimeException("Factura no encontrada"));
         if (!invoice.getTenantId().equals(tenantId)) {
             throw new RuntimeException("No tienes acceso a esta factura");
@@ -198,7 +199,20 @@ public class InvoiceService {
             throw new RuntimeException("La factura ya fue emitida a AFIP");
         }
 
-        emitirEnAfip(invoice, toInvoiceRequest(invoice));
+        invoice.setTipoComprobante(request.getTipoComprobante());
+        invoice.setPuntoVenta(request.getPuntoVenta());
+
+        InvoiceRequest invoiceRequest = toInvoiceRequest(invoice);
+        invoiceRequest.setConcepto(request.getConcepto());
+        invoiceRequest.setTipoDocumento(request.getTipoDocumento());
+        invoiceRequest.setNumeroDocumento(request.getNumeroDocumento());
+        invoiceRequest.setNombreCliente(request.getNombreCliente());
+        invoiceRequest.setCondicionIvaReceptorId(request.getCondicionIvaReceptorId());
+        invoiceRequest.setMonedaId(request.getMonedaId());
+        invoiceRequest.setMonedaCotiz(request.getMonedaCotiz());
+
+        emitirEnAfip(invoice, invoiceRequest);
+        sendInvoiceEmail(invoice, invoiceRequest, tenantId);
         invoice.setEstado("EMITIDA_AFIP");
         return invoiceRepository.save(invoice);
     }
@@ -232,6 +246,10 @@ public class InvoiceService {
             itemReq.setPrecioUnitario(item.getPrecioUnitario());
             return itemReq;
         }).toList());
+        request.setImpTotConc(BigDecimal.ZERO);
+        request.setImpOpEx(BigDecimal.ZERO);
+        request.setImpTrib(BigDecimal.ZERO);
+        request.setImpIVA(BigDecimal.ZERO);
         return request;
     }
 }
