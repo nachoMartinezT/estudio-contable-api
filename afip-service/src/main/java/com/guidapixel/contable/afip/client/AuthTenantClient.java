@@ -46,8 +46,11 @@ public class AuthTenantClient {
             }
 
             JsonNode root = objectMapper.readTree(response.body());
-            if ("ERROR".equals(root.get("status").asText())) {
-                throw new RuntimeException("Error obteniendo config AFIP del tenant: " + root.get("error").asText());
+            JsonNode statusNode = root.get("status");
+            if (statusNode != null && "ERROR".equals(statusNode.asText())) {
+                JsonNode errorNode = root.get("error");
+                String errorMsg = errorNode != null ? errorNode.asText() : "Unknown error";
+                throw new RuntimeException("Error obteniendo config AFIP del tenant: " + errorMsg);
             }
 
             return TenantAfipConfig.builder()
