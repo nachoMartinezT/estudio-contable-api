@@ -82,6 +82,10 @@ public class SubscriptionCheckFilter implements GlobalFilter, Ordered {
             return chain.filter(exchange);
         }
 
+        if ("ROLE_SUPER_ADMIN".equals(role) || "ROLE_ADMIN".equals(role)) {
+            return chain.filter(exchange);
+        }
+
         if (tenantId == null) {
             return chain.filter(exchange);
         }
