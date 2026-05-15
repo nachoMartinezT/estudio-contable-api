@@ -89,6 +89,16 @@ public class InvoiceService {
 
         Long tenantId = TenantContext.getTenantId();
 
+        BigDecimal impIVA = request.getImpIVA() != null ? request.getImpIVA() : BigDecimal.ZERO;
+        BigDecimal impTrib = request.getImpTrib() != null ? request.getImpTrib() : BigDecimal.ZERO;
+        BigDecimal impOpEx = request.getImpOpEx() != null ? request.getImpOpEx() : BigDecimal.ZERO;
+        BigDecimal impTotConc = request.getImpTotConc() != null ? request.getImpTotConc() : BigDecimal.ZERO;
+        BigDecimal impTotal = invoice.getTotal();
+        BigDecimal impNeto = impTotal.subtract(impIVA).subtract(impTrib).subtract(impOpEx).subtract(impTotConc);
+        if (impNeto.compareTo(BigDecimal.ZERO) < 0) {
+            impNeto = BigDecimal.ZERO;
+        }
+
         AfipFacturaRequest afipRequest = AfipFacturaRequest.builder()
                 .puntoVenta(request.getPuntoVenta())
                 .tipoComprobante(request.getTipoComprobante())
@@ -101,12 +111,12 @@ public class InvoiceService {
                 .fechaServicioDesde(request.getFechaServicioDesde())
                 .fechaServicioHasta(request.getFechaServicioHasta())
                 .fechaVencimientoPago(request.getFechaVencimientoPago())
-                .impTotal(invoice.getTotal())
-                .impTotConc(request.getImpTotConc())
-                .impNeto(invoice.getTotal())
-                .impOpEx(request.getImpOpEx())
-                .impTrib(request.getImpTrib())
-                .impIVA(request.getImpIVA())
+                .impTotal(impTotal)
+                .impTotConc(impTotConc)
+                .impNeto(impNeto)
+                .impOpEx(impOpEx)
+                .impTrib(impTrib)
+                .impIVA(impIVA)
                 .monedaId(request.getMonedaId())
                 .monedaCotiz(request.getMonedaCotiz())
                 .items(request.getItems().stream()

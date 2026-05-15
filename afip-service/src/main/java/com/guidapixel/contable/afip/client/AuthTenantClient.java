@@ -53,16 +53,33 @@ public class AuthTenantClient {
                 throw new RuntimeException("Error obteniendo config AFIP del tenant: " + errorMsg);
             }
 
+            String afipCuit = requireTextNode(root, "afipCuit", "CUIT de AFIP");
+            String afipCertPassword = requireTextNode(root, "afipCertPassword", "password del certificado AFIP");
+            String afipCertPath = requireTextNode(root, "afipCertPath", "ruta del certificado AFIP");
+            boolean afipHomologacion = root.has("afipHomologacion") && root.get("afipHomologacion").asBoolean();
+
             return TenantAfipConfig.builder()
                     .tenantId(tenantId)
-                    .afipCuit(root.get("afipCuit").asText())
-                    .afipCertPassword(root.get("afipCertPassword").asText())
-                    .afipCertPath(root.get("afipCertPath").asText())
-                    .afipHomologacion(root.get("afipHomologacion").asBoolean())
+                    .afipCuit(afipCuit)
+                    .afipCertPassword(afipCertPassword)
+                    .afipCertPath(afipCertPath)
+                    .afipHomologacion(afipHomologacion)
                     .build();
         } catch (Exception e) {
             log.error("Error obteniendo config AFIP del tenant {}: {}", tenantId, e.getMessage());
             throw new RuntimeException("Error obteniendo configuracion AFIP del tenant: " + e.getMessage(), e);
         }
+    }
+
+    private String requireTextNode(JsonNode root, String fieldName, String description) {
+        JsonNode node = root.get(fieldName);
+        if (node == null || node.isNull()) {
+            throw new RuntimeException("Configuracion AFIP incompleta: falta el campo '" + fieldName + "' (" + description + ")");
+        }
+        String value = node.asText();
+        if (value == null || value.isBlank()) {
+            throw new RuntimeException("Configuracion AFIP incompleta: el campo '" + fieldName + "' (" + description + ") esta vacio");
+        }
+        return value;
     }
 }

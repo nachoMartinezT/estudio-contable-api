@@ -4,6 +4,7 @@ import com.guidapixel.contable.afip.domain.model.Factura;
 import com.guidapixel.contable.afip.domain.repository.FacturaRepository;
 import com.guidapixel.contable.afip.web.dto.FacturaDto;
 import com.guidapixel.contable.shared.model.TenantAfipConfig;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -16,9 +17,11 @@ import java.net.http.HttpResponse;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
+@Slf4j
 @Service
 public class AfipFacturacionService {
 
@@ -35,6 +38,7 @@ public class AfipFacturacionService {
     private String wsfeProduccionUrl;
 
     private static final DateTimeFormatter AFIP_DATE = DateTimeFormatter.ofPattern("yyyyMMdd");
+    private final Map<String, Object> emissionLocks = new ConcurrentHashMap<>();
 
     public int obtenerUltimoComprobante(Integer puntoVenta, Integer tipoComprobante, String cuitEmisor, TenantAfipConfig tenantConfig) throws Exception {
         cuitEmisor = normalizarCuit(cuitEmisor);
@@ -84,7 +88,11 @@ public class AfipFacturacionService {
         Integer ptoVenta = datos.getPuntoVenta() != null ? datos.getPuntoVenta() : 1;
         Integer tipoCbte = datos.getTipoComprobante() != null ? datos.getTipoComprobante() : 11;
 
-        Map<String, String> credenciales = authService.getAfipToken(tenantConfig);
+        String lockKey = cuit + ":" + ptoVenta + ":" + tipoCbte;
+        Object lock = emissionLocks.computeIfAbsent(lockKey, k -> new Object());
+
+        synchronized (lock) {
+            Map<String, String> credenciales = authService.getAfipToken(tenantConfig);
         String token = credenciales.get("token");
         String sign = credenciales.get("sign");
 
@@ -101,6 +109,8 @@ public class AfipFacturacionService {
         BigDecimal impTrib = datos.getImpTrib() != null ? datos.getImpTrib() : BigDecimal.ZERO;
         BigDecimal impIVA = datos.getImpIVA() != null ? datos.getImpIVA() : BigDecimal.ZERO;
 
+        validarConsistenciaImportes(impTotal, impNeto, impIVA, impTrib, impOpEx, impTotConc);
+
         Integer concepto = datos.getConcepto() != null ? datos.getConcepto() : 1;
         Integer docTipo = datos.getTipoDocumento() != null ? datos.getTipoDocumento() : 99;
         Long docNro = datos.getNumeroDocumento() != null ? datos.getNumeroDocumento() : 0L;
@@ -112,6 +122,8 @@ public class AfipFacturacionService {
         String fechaServHasta = datos.getFechaServicioHasta() != null ? datos.getFechaServicioHasta().format(AFIP_DATE) : "";
         String fechaVtoPago = datos.getFechaVencimientoPago() != null ? datos.getFechaVencimientoPago().format(AFIP_DATE) : "";
 
+        validarFechasPorConcepto(concepto, fechaServDesde, fechaServHasta, fechaVtoPago);
+
         String soapXml = buildFeCaeSolicitarXml(
                 token, sign, cuit,
                 ptoVenta, tipoCbte, 1,
@@ -119,8 +131,12 @@ public class AfipFacturacionService {
                 proximoNro, fechaHoy,
                 impTotal, impTotConc, impNeto, impOpEx, impTrib, impIVA,
                 monedaId, monedaCotiz, condIva,
-                fechaServDesde, fechaServHasta, fechaVtoPago
+                fechaServDesde, fechaServHasta, fechaVtoPago,
+                datos.getItems()
         );
+
+        log.info("Enviando solicitud FECAESolicitar a AFIP - CUIT: {}, Tipo: {}, PV: {}, Nro: {}", cuit, tipoCbte, ptoVenta, proximoNro);
+        log.debug("XML enviado a AFIP: {}", soapXml);
 
         HttpClient client = HttpClient.newHttpClient();
         HttpRequest request = HttpRequest.newBuilder()
@@ -133,16 +149,20 @@ public class AfipFacturacionService {
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
         if (response.statusCode() != 200) {
+            log.error("AFIP respondio HTTP {}. Body: {}", response.statusCode(), response.body());
             throw new RuntimeException("Error HTTP AFIP: " + response.statusCode());
         }
 
         String respuestaXml = response.body();
+        log.debug("XML recibido de AFIP: {}", respuestaXml);
+
         String resultado = extraerEtiqueta(respuestaXml, "Resultado");
         String cae = extraerEtiqueta(respuestaXml, "CAE");
         String caeVto = extraerEtiqueta(respuestaXml, "CAEFchVto");
         String observaciones = extraerObservaciones(respuestaXml);
 
         if (cae == null || "No encontrado".equals(cae) || cae.isEmpty()) {
+            log.error("AFIP rechazo la factura. Resultado: {}, Observaciones: {}", resultado, observaciones);
             throw new RuntimeException("AFIP RECHAZO LA FACTURA: " + (observaciones.isEmpty() ? extraerEtiqueta(respuestaXml, "Msg") : observaciones));
         }
 
@@ -193,6 +213,7 @@ public class AfipFacturacionService {
                 "imp_total", impTotal.toString(),
                 "resultado", resultado
         );
+        }
     }
 
     private String buildFeCaeSolicitarXml(
@@ -203,7 +224,8 @@ public class AfipFacturacionService {
             BigDecimal impTotal, BigDecimal impTotConc, BigDecimal impNeto,
             BigDecimal impOpEx, BigDecimal impTrib, BigDecimal impIVA,
             String monedaId, BigDecimal monedaCotiz, Integer condIvaReceptorId,
-            String fechaServDesde, String fechaServHasta, String fechaVtoPago
+            String fechaServDesde, String fechaServHasta, String fechaVtoPago,
+            List<FacturaDto.ItemDto> items
     ) {
         StringBuilder xml = new StringBuilder();
         xml.append("<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:ar=\"http://ar.gov.afip.dif.FEV1/\">");
@@ -238,6 +260,10 @@ public class AfipFacturacionService {
         xml.append("<ar:MonId>").append(monedaId).append("</ar:MonId>");
         xml.append("<ar:MonCotiz>").append(formatDecimal(monedaCotiz)).append("</ar:MonCotiz>");
         xml.append("<ar:CondicionIVAReceptorId>").append(condIvaReceptorId).append("</ar:CondicionIVAReceptorId>");
+
+        if (impIVA.compareTo(BigDecimal.ZERO) > 0) {
+            xml.append(buildIvaXml(impIVA, impNeto, items));
+        }
 
         if (fechaServDesde != null && !fechaServDesde.isEmpty()) {
             xml.append("<ar:FchServDesde>").append(fechaServDesde).append("</ar:FchServDesde>");
@@ -283,11 +309,21 @@ public class AfipFacturacionService {
 
     private String extraerObservaciones(String xml) {
         StringBuilder obs = new StringBuilder();
-        Matcher m = Pattern.compile("<Observacion>.*?<Msg>(.*?)</Msg>.*?</Observacion>", Pattern.DOTALL).matcher(xml);
-        while (m.find()) {
+
+        // Parsear Observaciones del detalle de comprobante
+        Matcher mObs = Pattern.compile("<Observacion>.*?<Code>(.*?)</Code>.*?<Msg>(.*?)</Msg>.*?</Observacion>", Pattern.DOTALL).matcher(xml);
+        while (mObs.find()) {
             if (!obs.isEmpty()) obs.append("; ");
-            obs.append(m.group(1));
+            obs.append("[").append(mObs.group(1)).append("] ").append(mObs.group(2));
         }
+
+        // Parsear Errores generales del resultado
+        Matcher mErr = Pattern.compile("<Err>.*?<Code>(.*?)</Code>.*?<Msg>(.*?)</Msg>.*?</Err>", Pattern.DOTALL).matcher(xml);
+        while (mErr.find()) {
+            if (!obs.isEmpty()) obs.append("; ");
+            obs.append("[ERROR ").append(mErr.group(1)).append("] ").append(mErr.group(2));
+        }
+
         return obs.toString();
     }
 
@@ -319,5 +355,87 @@ public class AfipFacturacionService {
             case 13 -> "Nota de Credito C";
             default -> "Tipo " + tipo;
         };
+    }
+
+    private String buildIvaXml(BigDecimal impIVA, BigDecimal impNeto, List<FacturaDto.ItemDto> items) {
+        StringBuilder xml = new StringBuilder();
+        xml.append("<ar:Iva>");
+
+        Integer alicuotaId = resolveAlicuotaIdFromItems(items);
+        if (alicuotaId == null && impNeto.compareTo(BigDecimal.ZERO) > 0) {
+            BigDecimal tasa = impIVA.multiply(BigDecimal.valueOf(100)).divide(impNeto, 2, java.math.RoundingMode.HALF_UP);
+            alicuotaId = resolveAlicuotaId(tasa);
+        }
+        if (alicuotaId == null) {
+            alicuotaId = 5; // Default 21%
+        }
+
+        xml.append("<ar:AlicIva>");
+        xml.append("<ar:Id>").append(alicuotaId).append("</ar:Id>");
+        xml.append("<ar:BaseImp>").append(formatDecimal(impNeto)).append("</ar:BaseImp>");
+        xml.append("<ar:Importe>").append(formatDecimal(impIVA)).append("</ar:Importe>");
+        xml.append("</ar:AlicIva>");
+
+        xml.append("</ar:Iva>");
+        return xml.toString();
+    }
+
+    private Integer resolveAlicuotaIdFromItems(List<FacturaDto.ItemDto> items) {
+        if (items == null || items.isEmpty()) return null;
+        BigDecimal primeraTasa = null;
+        for (FacturaDto.ItemDto item : items) {
+            if (item.getIva() != null && item.getPrecioUnitario() != null && item.getPrecioUnitario().compareTo(BigDecimal.ZERO) > 0) {
+                BigDecimal tasa = item.getIva().multiply(BigDecimal.valueOf(100)).divide(item.getPrecioUnitario(), 2, java.math.RoundingMode.HALF_UP);
+                if (primeraTasa == null) {
+                    primeraTasa = tasa;
+                } else if (primeraTasa.subtract(tasa).abs().compareTo(BigDecimal.valueOf(0.5)) > 0) {
+                    // Hay múltiples tasas diferentes - simplificamos usando la primera
+                    break;
+                }
+            }
+        }
+        if (primeraTasa != null) {
+            return resolveAlicuotaId(primeraTasa);
+        }
+        return null;
+    }
+
+    private Integer resolveAlicuotaId(BigDecimal tasa) {
+        if (tasa.compareTo(BigDecimal.ZERO) <= 0) return 3; // 0%
+        if (tasa.compareTo(BigDecimal.valueOf(3)) < 0) return 9; // 2.5%
+        if (tasa.compareTo(BigDecimal.valueOf(7)) < 0) return 8; // 5%
+        if (tasa.compareTo(BigDecimal.valueOf(15)) < 0) return 4; // 10.5%
+        if (tasa.compareTo(BigDecimal.valueOf(24)) < 0) return 5; // 21%
+        return 6; // 27%
+    }
+
+    private void validarConsistenciaImportes(BigDecimal impTotal, BigDecimal impNeto, BigDecimal impIVA,
+                                             BigDecimal impTrib, BigDecimal impOpEx, BigDecimal impTotConc) {
+        BigDecimal sumaComponentes = impNeto.add(impIVA).add(impTrib).add(impOpEx).add(impTotConc);
+        BigDecimal diferencia = impTotal.subtract(sumaComponentes).abs();
+        if (diferencia.compareTo(BigDecimal.valueOf(0.05)) > 0) {
+            throw new IllegalArgumentException(
+                    "Los importes no son consistentes. impTotal=" + impTotal +
+                    " pero impNeto+impIVA+impTrib+impOpEx+impTotConc=" + sumaComponentes +
+                    " (diferencia=" + diferencia + ")"
+            );
+        }
+    }
+
+    private void validarFechasPorConcepto(Integer concepto, String fechaServDesde, String fechaServHasta, String fechaVtoPago) {
+        if (concepto == 2 || concepto == 3) {
+            if (fechaServDesde.isEmpty() || fechaServHasta.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "Para concepto " + concepto + " (Servicios / Productos y Servicios), " +
+                        "las fechas de servicio desde y hasta son obligatorias."
+                );
+            }
+            if (fechaVtoPago.isEmpty()) {
+                throw new IllegalArgumentException(
+                        "Para concepto " + concepto + " (Servicios / Productos y Servicios), " +
+                        "la fecha de vencimiento de pago es obligatoria."
+                );
+            }
+        }
     }
 }
