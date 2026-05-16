@@ -103,6 +103,22 @@ public class ClientService {
         syncRecurringFee(client);
     }
 
+    @Transactional
+    public Client reactivateClient(Long id) {
+        Long tenantId = requireTenantId();
+        Client client = clientRepository.findByIdAndTenantId(id, tenantId)
+                .orElseThrow(() -> new RuntimeException("Cliente no encontrado"));
+        client.setActivo(true);
+        Client saved = clientRepository.save(client);
+        syncRecurringFee(saved);
+        return saved;
+    }
+
+    @Transactional(readOnly = true)
+    public List<Client> getInactiveClients() {
+        return clientRepository.findByTenantIdAndActivoFalseOrderByRazonSocialAsc(requireTenantId());
+    }
+
     private void createClientUserIfNeeded(Client client) {
         if (client.getEmail() == null || client.getEmail().isBlank()) {
             return;

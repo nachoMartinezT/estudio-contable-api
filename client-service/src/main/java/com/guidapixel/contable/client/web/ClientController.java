@@ -57,9 +57,23 @@ public class ClientController {
     public ResponseEntity<?> deleteClient(@PathVariable Long id) {
         try {
             clientService.deactivateClient(id);
-            return ResponseEntity.ok(Map.of("status", "EXITO"));
+            return ResponseEntity.ok(Map.of("status", "EXITO", "message", "Cliente deshabilitado correctamente"));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", e.getMessage()));
         }
+    }
+
+    @PostMapping("/{id}/reactivate")
+    public ResponseEntity<?> reactivateClient(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(clientService.reactivateClient(id));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/inactive")
+    public ResponseEntity<List<Client>> getInactiveClients() {
+        return ResponseEntity.ok(clientService.getInactiveClients());
     }
 }

@@ -57,8 +57,8 @@ public class AdminService {
     private static final String CHARS = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
     private static final int PASSWORD_LENGTH = 12;
 
-    public List<Map<String, Object>> getAllTenants() {
-        return tenantRepository.findAll().stream()
+    public List<Map<String, Object>> getAllTenants(boolean activo) {
+        return tenantRepository.findByActivo(activo).stream()
                 .map(t -> {
                     Map<String, Object> map = tenantToMap(t);
                     userRepository.findByTenantId(t.getId()).stream()
@@ -320,7 +320,16 @@ public class AdminService {
     public void deleteTenant(Long tenantId) {
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new RuntimeException("Tenant no encontrado"));
-        purgeTenant(tenantId);
+        tenant.setActivo(false);
+        tenantRepository.save(tenant);
+    }
+
+    @Transactional
+    public void reactivateTenant(Long tenantId) {
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new RuntimeException("Tenant no encontrado"));
+        tenant.setActivo(true);
+        tenantRepository.save(tenant);
     }
 
     private void purgeTenant(Long tenantId) {

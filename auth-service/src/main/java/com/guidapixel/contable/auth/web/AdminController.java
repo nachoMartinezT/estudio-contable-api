@@ -35,9 +35,9 @@ public class AdminController {
     }
 
     @GetMapping("/tenants")
-    public ResponseEntity<?> getAllTenants() {
+    public ResponseEntity<?> getAllTenants(@RequestParam(defaultValue = "true") boolean activo) {
         try {
-            return ResponseEntity.ok(adminService.getAllTenants());
+            return ResponseEntity.ok(adminService.getAllTenants(activo));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("error", e.getMessage()));
         }
@@ -183,7 +183,17 @@ public class AdminController {
     public ResponseEntity<?> deleteTenant(@PathVariable Long id) {
         try {
             adminService.deleteTenant(id);
-            return ResponseEntity.ok(Map.of("status", "OK", "message", "Estudio eliminado correctamente"));
+            return ResponseEntity.ok(Map.of("status", "OK", "message", "Estudio deshabilitado correctamente"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/tenants/{id}/reactivate")
+    public ResponseEntity<?> reactivateTenant(@PathVariable Long id) {
+        try {
+            adminService.reactivateTenant(id);
+            return ResponseEntity.ok(Map.of("status", "OK", "message", "Estudio reactivado correctamente"));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", e.getMessage()));
         }

@@ -8,12 +8,9 @@ import java.util.Optional;
 
 public interface ClientRepository extends JpaRepository<Client, Long> {
     List<Client> findByTenantIdAndActivoTrueOrderByRazonSocialAsc(Long tenantId);
-
+    List<Client> findByTenantIdAndActivoFalseOrderByRazonSocialAsc(Long tenantId);
     long countByTenantIdAndActivoTrue(Long tenantId);
-
     Optional<Client> findByIdAndTenantId(Long id, Long tenantId);
-
-    boolean existsByTenantIdAndCuitAndActivoTrue(Long tenantId, String cuit);
-
     Optional<Client> findByTenantIdAndCuitAndActivoTrue(Long tenantId, String cuit);
+    boolean existsByTenantIdAndCuitAndActivoTrue(Long tenantId, String cuit);
 }
