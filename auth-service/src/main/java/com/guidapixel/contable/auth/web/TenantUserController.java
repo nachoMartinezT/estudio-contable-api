@@ -3,6 +3,7 @@ package com.guidapixel.contable.auth.web;
 import com.guidapixel.contable.auth.service.AdminService;
 import com.guidapixel.contable.auth.web.dto.CreateUserRequest;
 import com.guidapixel.contable.auth.web.dto.StaffPermissionsResponse;
+import com.guidapixel.contable.auth.web.dto.UpdateMyTenantRequest;
 import com.guidapixel.contable.auth.web.dto.UpdateStaffPermissionsRequest;
 import com.guidapixel.contable.shared.multitenancy.TenantContext;
 import lombok.RequiredArgsConstructor;
@@ -67,6 +68,26 @@ public class TenantUserController {
         try {
             Long tenantId = TenantContext.getTenantId();
             return ResponseEntity.ok(adminService.getStaffUsers(tenantId));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", e.getMessage()));
+        }
+    }
+
+    @GetMapping("/me")
+    public ResponseEntity<?> getMyTenant() {
+        try {
+            Long tenantId = TenantContext.getTenantId();
+            return ResponseEntity.ok(adminService.getMyTenant(tenantId));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", e.getMessage()));
+        }
+    }
+
+    @PutMapping("/me")
+    public ResponseEntity<?> updateMyTenant(@RequestBody UpdateMyTenantRequest request) {
+        try {
+            Long tenantId = TenantContext.getTenantId();
+            return ResponseEntity.ok(adminService.updateMyTenant(tenantId, request));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", e.getMessage()));
         }

@@ -647,6 +647,29 @@ public class AdminService {
         return map;
     }
 
+    public Map<String, Object> getMyTenant(Long tenantId) {
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new RuntimeException("Tenant no encontrado"));
+        return Map.of(
+                "id", tenant.getId(),
+                "razonSocial", tenant.getRazonSocial(),
+                "cuit", tenant.getCuit(),
+                "emailContacto", tenant.getEmailContacto(),
+                "activo", tenant.isActivo()
+        );
+    }
+
+    @Transactional
+    public Map<String, Object> updateMyTenant(Long tenantId, com.guidapixel.contable.auth.web.dto.UpdateMyTenantRequest request) {
+        Tenant tenant = tenantRepository.findById(tenantId)
+                .orElseThrow(() -> new RuntimeException("Tenant no encontrado"));
+        if (request.getRazonSocial() != null) tenant.setRazonSocial(request.getRazonSocial());
+        if (request.getCuit() != null) tenant.setCuit(request.getCuit());
+        if (request.getEmailContacto() != null) tenant.setEmailContacto(request.getEmailContacto());
+        tenantRepository.save(tenant);
+        return Map.of("status", "EXITO", "mensaje", "Configuracion actualizada correctamente");
+    }
+
     private Map<String, Object> subscriptionToMap(Subscription subscription) {
         return Map.of(
                 "id", subscription.getId(),

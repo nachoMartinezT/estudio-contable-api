@@ -177,14 +177,29 @@ Para facturas con validez fiscal (CAE):
 | **Concepto** | Que se factura | Productos (1), Servicios (2), Mixto (3) |
 | **Tipo Doc. Receptor** | Tipo de documento del cliente | CUIT (80), DNI (96) |
 | **Nro. Doc. Receptor** | Numero de documento | Sin guiones ni puntos |
-| **Condicion IVA** | Clasificacion IVA del receptor | Consumidor Final (5), RI (3), etc. |
+| **Condicion IVA** | Clasificacion IVA del receptor | Consumidor Final (5), RI (1), etc. |
+| **Moneda** | Moneda de la factura | PES (pesos), DOL (dolares) |
+| **Cotizacion** | Cotizacion de la moneda | 1 (para pesos) |
 
-4. Si el concepto es **Servicios** o **Mixto**, apareceran campos adicionales:
+4. Si el concepto es **Servicios** (2) o **Mixto** (3), son obligatorios:
    - **Servicio Desde / Hasta**: Periodo facturado
    - **Vencimiento Pago**: Fecha limite de pago
 
-5. Seleccionar cliente y agregar items
-6. Click en **"Emitir en AFIP"**
+5. Importes AFIP (obligatorios para facturas con IVA):
+
+| Campo | Descripcion | Calculo |
+|---|---|---|
+| **Subtotal (items)** | Suma de cantidad x precio unitario | Automatico |
+| **IVA** | Importe de IVA | Automatico 21% para Factura A |
+| **Tributos** | Otros tributos | Manual (default 0) |
+| **Op. Exentas** | Operaciones exentas | Manual (default 0) |
+| **No Gravado** | Conceptos no gravados | Manual (default 0) |
+| **Total** | Importe total | Subtotal + IVA + Tributos + Exentas + NoGravado |
+
+> El sistema valida automaticamente que `impTotal = impNeto + impIVA + impTrib + impOpEx + impTotConc`. Si no coinciden, rechaza antes de enviar a AFIP.
+
+6. Seleccionar cliente y agregar items
+7. Click en **"Emitir en AFIP"**
 
 #### Que sucede internamente
 
@@ -396,9 +411,32 @@ curl -X POST http://localhost:8080/api/v1/invoices \
     "clientEmail": "cliente@empresa.com",
     "condicionIvaReceptorId": 5,
     "concepto": 1,
+    "monedaId": "PES",
+    "monedaCotiz": 1,
+    "fechaServicioDesde": "2026-05-01",
+    "fechaServicioHasta": "2026-05-31",
+    "fechaVencimientoPago": "2026-06-15",
+    "impTotConc": 0,
+    "impOpEx": 0,
+    "impTrib": 0,
+    "impIVA": 0,
     "items": [
       { "concepto": "Honorarios profesionales", "cantidad": 1, "precioUnitario": 50000 }
     ]
+  }'
+
+# Obtener configuracion del tenant actual
+curl -X GET http://localhost:8080/api/v1/tenants/me \
+  -H "Authorization: Bearer <TOKEN>"
+
+# Actualizar configuracion del tenant actual
+curl -X PUT http://localhost:8080/api/v1/tenants/me \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer <TOKEN>" \
+  -d '{
+    "razonSocial": "Estudio Contable Guida SRL",
+    "cuit": "30-12345678-9",
+    "emailContacto": "contacto@estudio.com"
   }'
 ```
 
@@ -468,6 +506,13 @@ El dashboard muestra:
 - **Total Usuarios**: Cantidad de usuarios en el sistema
 - **Subscripciones Activas**: Total de modulos habilitados
 - **Modulos Disponibles**: Cantidad de modulos en la plataforma
+
+### Configuracion del Tenant (propietario)
+
+| Metodo | Endpoint | Descripcion |
+|---|---|---|
+| GET | `/api/v1/tenants/me` | Obtener datos del tenant actual |
+| PUT | `/api/v1/tenants/me` | Actualizar datos basicos del tenant actual |
 
 ### API de Administracion
 
@@ -645,11 +690,11 @@ contable-api/
 ├── mp-service/           # MercadoPago
 ├── notification-service/ # Emails transaccionales
 ├── report-service/       # Reportes
-├── shared/               # Libreria compartida (JWT, BaseEntity, etc.)
+├── shared/               # Libreria compartida (JWT, BaseEntity, multitenancy, etc.)
 ├── docker-compose.yml    # Orquestacion de servicios
 └── .env                  # Variables de entorno (no versionado)
 
-guida-frontend/
+contable-frontend/
 ├── src/
 │   ├── api/              # Axios configurado con JWT
 │   ├── components/       # Componentes reutilizables
