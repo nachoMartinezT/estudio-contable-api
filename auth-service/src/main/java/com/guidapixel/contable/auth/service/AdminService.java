@@ -184,17 +184,32 @@ public class AdminService {
 
     @Transactional
     public Map<String, Object> createTenant(CreateTenantRequest request) {
-        if (tenantRepository.findByCuit(request.getCuitEstudio()).isPresent()) {
-            throw new RuntimeException("Ya existe un estudio con ese CUIT");
+        var existingTenant = tenantRepository.findByCuit(request.getCuitEstudio());
+        if (existingTenant.isPresent()) {
+            Tenant t = existingTenant.get();
+            if (t.isActivo()) {
+                throw new RuntimeException("Ya existe un estudio activo con ese CUIT");
+            }
+            // Eliminar tenant inactivo (zombi) para liberar el CUIT
+            purgeTenant(t.getId());
         }
-        if (userRepository.findByEmail(request.getEmailAdmin()).isPresent()) {
-            throw new RuntimeException("Ya existe un usuario con ese email");
+
+        var existingUser = userRepository.findByEmail(request.getEmailAdmin());
+        if (existingUser.isPresent()) {
+            User u = existingUser.get();
+            var userTenant = u.getTenantId() != null ? tenantRepository.findById(u.getTenantId()).orElse(null) : null;
+            if (userTenant != null && userTenant.isActivo()) {
+                throw new RuntimeException("Ya existe un usuario activo con ese email");
+            }
+            // Eliminar usuario huerfano o de tenant inactivo
+            userRepository.delete(u);
         }
 
         Tenant tenant = Tenant.builder()
                 .razonSocial(request.getNombreEstudio())
                 .cuit(request.getCuitEstudio())
                 .emailContacto(request.getEmailAdmin())
+                .activo(true)
                 .build();
         Tenant savedTenant = tenantRepository.save(tenant);
 
@@ -305,18 +320,43 @@ public class AdminService {
     public void deleteTenant(Long tenantId) {
         Tenant tenant = tenantRepository.findById(tenantId)
                 .orElseThrow(() -> new RuntimeException("Tenant no encontrado"));
+        purgeTenant(tenantId);
+    }
 
-        List<Subscription> subscriptions = subscriptionRepository.findByTenantId(tenantId);
-        subscriptionRepository.deleteAll(subscriptions);
-
-        List<User> users = userRepository.findByTenantId(tenantId);
-        for (User user : users) {
-            staffPermissionsRepository.findByStaffUserIdAndTenantId(user.getId(), tenantId)
-                    .ifPresent(staffPermissionsRepository::delete);
+    private void purgeTenant(Long tenantId) {
+        try {
+            List<Subscription> subscriptions = subscriptionRepository.findByTenantId(tenantId);
+            subscriptionRepository.deleteAll(subscriptions);
+        } catch (Exception e) {
+            // ignorar si ya no existen
         }
-        userRepository.deleteAll(users);
 
-        tenantRepository.delete(tenant);
+        try {
+            List<User> users = userRepository.findByTenantId(tenantId);
+            for (User user : users) {
+                try {
+                    staffPermissionsRepository.findByStaffUserIdAndTenantId(user.getId(), tenantId)
+                            .ifPresent(staffPermissionsRepository::delete);
+                } catch (Exception ignored) {}
+            }
+            userRepository.deleteAll(users);
+        } catch (Exception e) {
+            // ignorar si ya no existen
+        }
+
+        try {
+            tenantRepository.deleteById(tenantId);
+        } catch (Exception e) {
+            // ignorar si ya no existe
+        }
+
+        // Intentar eliminar certificado del filesystem
+        try {
+            Path certPath = Paths.get("/app/certs/" + tenantId + ".p12");
+            if (Files.exists(certPath)) {
+                Files.delete(certPath);
+            }
+        } catch (Exception ignored) {}
     }
 
     @Transactional
