@@ -59,7 +59,14 @@ public class AdminService {
 
     public List<Map<String, Object>> getAllTenants() {
         return tenantRepository.findAll().stream()
-                .map(this::tenantToMap)
+                .map(t -> {
+                    Map<String, Object> map = tenantToMap(t);
+                    userRepository.findByTenantId(t.getId()).stream()
+                            .filter(u -> u.getRole() == Role.ADMIN)
+                            .findFirst()
+                            .ifPresent(admin -> map.put("adminUserId", admin.getId()));
+                    return map;
+                })
                 .collect(Collectors.toList());
     }
 

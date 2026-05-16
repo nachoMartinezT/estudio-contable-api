@@ -1,6 +1,7 @@
 package com.guidapixel.contable.auth.web;
 
 import com.guidapixel.contable.auth.service.AdminService;
+import com.guidapixel.contable.auth.service.AuthService;
 import com.guidapixel.contable.auth.web.dto.AdminSubscriptionRequest;
 import com.guidapixel.contable.auth.web.dto.CreateTenantRequest;
 import com.guidapixel.contable.auth.web.dto.CreateUserRequest;
@@ -22,6 +23,7 @@ import java.util.Map;
 public class AdminController {
 
     private final AdminService adminService;
+    private final AuthService authService;
 
     @PostMapping("/tenants")
     public ResponseEntity<?> createTenant(@RequestBody CreateTenantRequest request) {
@@ -182,6 +184,15 @@ public class AdminController {
         try {
             adminService.deleteTenant(id);
             return ResponseEntity.ok(Map.of("status", "OK", "message", "Estudio eliminado correctamente"));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/users/{id}/reset-password")
+    public ResponseEntity<?> resetUserPassword(@PathVariable Long id) {
+        try {
+            return ResponseEntity.ok(authService.adminResetPassword(id));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", e.getMessage()));
         }

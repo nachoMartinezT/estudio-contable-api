@@ -1,6 +1,7 @@
 package com.guidapixel.contable.auth.web;
 
 import com.guidapixel.contable.auth.service.AdminService;
+import com.guidapixel.contable.auth.service.AuthService;
 import com.guidapixel.contable.auth.web.dto.CreateUserRequest;
 import com.guidapixel.contable.auth.web.dto.StaffPermissionsResponse;
 import com.guidapixel.contable.auth.web.dto.UpdateMyTenantRequest;
@@ -18,6 +19,7 @@ import java.util.Map;
 public class TenantUserController {
 
     private final AdminService adminService;
+    private final AuthService authService;
 
     @PostMapping("/{tenantId}/users")
     public ResponseEntity<?> createUser(
@@ -88,6 +90,22 @@ public class TenantUserController {
         try {
             Long tenantId = TenantContext.getTenantId();
             return ResponseEntity.ok(adminService.updateMyTenant(tenantId, request));
+        } catch (Exception e) {
+            return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{tenantId}/users/{userId}/reset-password")
+    public ResponseEntity<?> resetStaffPassword(
+            @PathVariable Long tenantId,
+            @PathVariable Long userId
+    ) {
+        try {
+            Long requesterTenantId = TenantContext.getTenantId();
+            if (!tenantId.equals(requesterTenantId)) {
+                return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", "No tienes permiso para este tenant"));
+            }
+            return ResponseEntity.ok(authService.adminResetPassword(userId));
         } catch (Exception e) {
             return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", e.getMessage()));
         }

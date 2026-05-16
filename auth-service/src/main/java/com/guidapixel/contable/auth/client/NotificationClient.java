@@ -45,6 +45,28 @@ public class NotificationClient {
         sendNotification(url, body);
     }
 
+    public void sendPasswordResetEmail(String email, String nombre, String resetUrl, Long tenantId, String tenantName) {
+        String url = notificationServiceUrl + "/api/internal/notifications/send";
+
+        Map<String, String> variables = Map.of(
+                "nombreUsuario", nombre,
+                "email", email,
+                "resetUrl", resetUrl,
+                "expiracion", "24 horas"
+        );
+
+        Map<String, Object> body = Map.of(
+                "templateType", "RESET_PASSWORD",
+                "toEmail", email,
+                "toName", nombre,
+                "tenantName", tenantName != null ? tenantName : "Guida Contable",
+                "tenantId", tenantId != null ? tenantId : 0,
+                "variables", variables
+        );
+
+        sendNotification(url, body);
+    }
+
     private void sendNotification(String url, Map<String, Object> body) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
