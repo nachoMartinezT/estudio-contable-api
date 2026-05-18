@@ -73,7 +73,14 @@ public class AfipFacturacionService {
         HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
         if (response.statusCode() != 200) {
+            log.error("Error WSFE HTTP {}. Body: {}", response.statusCode(), response.body());
             throw new RuntimeException("Error WSFE: " + response.statusCode());
+        }
+
+        String errores = extraerErrores(response.body());
+        if (!errores.isEmpty()) {
+            log.error("Errores en FECompUltimoAutorizado: {}", errores);
+            throw new RuntimeException("Error consultando ultimo comprobante: " + errores);
         }
 
         String cbteNro = extraerEtiqueta(response.body(), "CbteNro");
@@ -93,126 +100,136 @@ public class AfipFacturacionService {
 
         synchronized (lock) {
             Map<String, String> credenciales = authService.getAfipToken(tenantConfig);
-        String token = credenciales.get("token");
-        String sign = credenciales.get("sign");
+            String token = credenciales.get("token");
+            String sign = credenciales.get("sign");
 
-        int ultimoNro = obtenerUltimoComprobante(ptoVenta, tipoCbte, cuit, tenantConfig);
-        int proximoNro = ultimoNro + 1;
+            int ultimoNro = obtenerUltimoComprobante(ptoVenta, tipoCbte, cuit, tenantConfig);
+            int proximoNro = ultimoNro + 1;
 
-        LocalDate fechaEmision = datos.getFechaEmision() != null ? datos.getFechaEmision() : LocalDate.now();
-        String fechaHoy = fechaEmision.format(AFIP_DATE);
+            LocalDate fechaEmision = datos.getFechaEmision() != null ? datos.getFechaEmision() : LocalDate.now();
+            String fechaHoy = fechaEmision.format(AFIP_DATE);
 
-        BigDecimal impTotal = calcularImporte(datos);
-        BigDecimal impNeto = datos.getImpNeto() != null ? datos.getImpNeto() : impTotal;
-        BigDecimal impTotConc = datos.getImpTotConc() != null ? datos.getImpTotConc() : BigDecimal.ZERO;
-        BigDecimal impOpEx = datos.getImpOpEx() != null ? datos.getImpOpEx() : BigDecimal.ZERO;
-        BigDecimal impTrib = datos.getImpTrib() != null ? datos.getImpTrib() : BigDecimal.ZERO;
-        BigDecimal impIVA = datos.getImpIVA() != null ? datos.getImpIVA() : BigDecimal.ZERO;
+            BigDecimal impTotal = calcularImporte(datos);
+            BigDecimal impTotConc = datos.getImpTotConc() != null ? datos.getImpTotConc() : BigDecimal.ZERO;
+            BigDecimal impOpEx = datos.getImpOpEx() != null ? datos.getImpOpEx() : BigDecimal.ZERO;
+            BigDecimal impTrib = datos.getImpTrib() != null ? datos.getImpTrib() : BigDecimal.ZERO;
+            BigDecimal impIVA = datos.getImpIVA() != null ? datos.getImpIVA() : BigDecimal.ZERO;
 
-        validarConsistenciaImportes(impTotal, impNeto, impIVA, impTrib, impOpEx, impTotConc);
+            BigDecimal impNeto = datos.getImpNeto() != null ? datos.getImpNeto() :
+                    impTotal.subtract(impIVA).subtract(impTrib).subtract(impOpEx).subtract(impTotConc);
+            if (impNeto.compareTo(BigDecimal.ZERO) < 0) {
+                log.warn("impNeto calculado es negativo ({}), se ajusta a 0", impNeto);
+                impNeto = BigDecimal.ZERO;
+            }
 
-        Integer concepto = datos.getConcepto() != null ? datos.getConcepto() : 1;
-        Integer docTipo = datos.getTipoDocumento() != null ? datos.getTipoDocumento() : 99;
-        Long docNro = datos.getNumeroDocumento() != null ? datos.getNumeroDocumento() : 0L;
-        Integer condIva = datos.getCondicionIvaReceptorId() != null ? datos.getCondicionIvaReceptorId() : 5;
-        String monedaId = datos.getMonedaId() != null ? datos.getMonedaId() : "PES";
-        BigDecimal monedaCotiz = datos.getMonedaCotiz() != null ? datos.getMonedaCotiz() : BigDecimal.ONE;
+            validarConsistenciaImportes(impTotal, impNeto, impIVA, impTrib, impOpEx, impTotConc);
 
-        String fechaServDesde = datos.getFechaServicioDesde() != null ? datos.getFechaServicioDesde().format(AFIP_DATE) : "";
-        String fechaServHasta = datos.getFechaServicioHasta() != null ? datos.getFechaServicioHasta().format(AFIP_DATE) : "";
-        String fechaVtoPago = datos.getFechaVencimientoPago() != null ? datos.getFechaVencimientoPago().format(AFIP_DATE) : "";
+            Integer concepto = datos.getConcepto() != null ? datos.getConcepto() : 1;
+            Integer docTipo = datos.getTipoDocumento() != null ? datos.getTipoDocumento() : 99;
+            Long docNro = datos.getNumeroDocumento() != null ? datos.getNumeroDocumento() : 0L;
+            Integer condIva = datos.getCondicionIvaReceptorId() != null ? datos.getCondicionIvaReceptorId() : 5;
+            String monedaId = datos.getMonedaId() != null ? datos.getMonedaId() : "PES";
+            BigDecimal monedaCotiz = datos.getMonedaCotiz() != null ? datos.getMonedaCotiz() : BigDecimal.ONE;
 
-        validarFechasPorConcepto(concepto, fechaServDesde, fechaServHasta, fechaVtoPago);
+            String fechaServDesde = datos.getFechaServicioDesde() != null ? datos.getFechaServicioDesde().format(AFIP_DATE) : "";
+            String fechaServHasta = datos.getFechaServicioHasta() != null ? datos.getFechaServicioHasta().format(AFIP_DATE) : "";
+            String fechaVtoPago = datos.getFechaVencimientoPago() != null ? datos.getFechaVencimientoPago().format(AFIP_DATE) : "";
 
-        String soapXml = buildFeCaeSolicitarXml(
-                token, sign, cuit,
-                ptoVenta, tipoCbte, 1,
-                concepto, docTipo, docNro,
-                proximoNro, fechaHoy,
-                impTotal, impTotConc, impNeto, impOpEx, impTrib, impIVA,
-                monedaId, monedaCotiz, condIva,
-                fechaServDesde, fechaServHasta, fechaVtoPago,
-                datos.getItems()
-        );
+            validarFechasPorConcepto(concepto, fechaServDesde, fechaServHasta, fechaVtoPago);
 
-        log.info("Enviando solicitud FECAESolicitar a AFIP - CUIT: {}, Tipo: {}, PV: {}, Nro: {}", cuit, tipoCbte, ptoVenta, proximoNro);
-        log.debug("XML enviado a AFIP: {}", soapXml);
+            String soapXml = buildFeCaeSolicitarXml(
+                    token, sign, cuit,
+                    ptoVenta, tipoCbte, 1,
+                    concepto, docTipo, docNro,
+                    proximoNro, fechaHoy,
+                    impTotal, impTotConc, impNeto, impOpEx, impTrib, impIVA,
+                    monedaId, monedaCotiz, condIva,
+                    fechaServDesde, fechaServHasta, fechaVtoPago,
+                    datos.getItems()
+            );
 
-        HttpClient client = HttpClient.newHttpClient();
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(resolveWsfeUrl(tenantConfig)))
-                .header("Content-Type", "text/xml;charset=UTF-8")
-                .header("SOAPAction", "http://ar.gov.afip.dif.FEV1/FECAESolicitar")
-                .POST(HttpRequest.BodyPublishers.ofString(soapXml))
-                .build();
+            log.info("Enviando solicitud FECAESolicitar a AFIP - CUIT: {}, Tipo: {}, PV: {}, Nro: {}", cuit, tipoCbte, ptoVenta, proximoNro);
+            log.debug("XML enviado a AFIP: {}", soapXml);
 
-        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
+            HttpClient client = HttpClient.newHttpClient();
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(URI.create(resolveWsfeUrl(tenantConfig)))
+                    .header("Content-Type", "text/xml;charset=UTF-8")
+                    .header("SOAPAction", "http://ar.gov.afip.dif.FEV1/FECAESolicitar")
+                    .POST(HttpRequest.BodyPublishers.ofString(soapXml))
+                    .build();
 
-        if (response.statusCode() != 200) {
-            log.error("AFIP respondio HTTP {}. Body: {}", response.statusCode(), response.body());
-            throw new RuntimeException("Error HTTP AFIP: " + response.statusCode());
-        }
+            HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
 
-        String respuestaXml = response.body();
-        log.debug("XML recibido de AFIP: {}", respuestaXml);
+            if (response.statusCode() != 200) {
+                log.error("AFIP respondio HTTP {}. Body: {}", response.statusCode(), response.body());
+                throw new RuntimeException("Error HTTP AFIP: " + response.statusCode());
+            }
 
-        String resultado = extraerEtiqueta(respuestaXml, "Resultado");
-        String cae = extraerEtiqueta(respuestaXml, "CAE");
-        String caeVto = extraerEtiqueta(respuestaXml, "CAEFchVto");
-        String observaciones = extraerObservaciones(respuestaXml);
+            String respuestaXml = response.body();
+            log.debug("XML recibido de AFIP: {}", respuestaXml);
 
-        if (cae == null || "No encontrado".equals(cae) || cae.isEmpty()) {
-            log.error("AFIP rechazo la factura. Resultado: {}, Observaciones: {}", resultado, observaciones);
-            throw new RuntimeException("AFIP RECHAZO LA FACTURA: " + (observaciones.isEmpty() ? extraerEtiqueta(respuestaXml, "Msg") : observaciones));
-        }
+            String resultado = extraerEtiqueta(respuestaXml, "Resultado");
+            String cae = extraerEtiqueta(respuestaXml, "CAE");
+            String caeVto = extraerEtiqueta(respuestaXml, "CAEFchVto");
+            String observaciones = extraerObservaciones(respuestaXml);
+            String errores = extraerErrores(respuestaXml);
 
-        Factura nuevaFactura = Factura.builder()
-                .puntoVenta(ptoVenta)
-                .tipoComprobante(tipoCbte)
-                .nroComprobante(proximoNro)
-                .tipoDocumento(docTipo)
-                .numeroDocumento(docNro)
-                .nombreCliente(datos.getNombreCliente())
-                .condicionIvaReceptorId(condIva)
-                .concepto(concepto)
-                .fechaEmision(fechaEmision)
-                .fechaServicioDesde(datos.getFechaServicioDesde())
-                .fechaServicioHasta(datos.getFechaServicioHasta())
-                .fechaVencimientoPago(datos.getFechaVencimientoPago())
-                .impTotal(impTotal)
-                .impTotConc(impTotConc)
-                .impNeto(impNeto)
-                .impOpEx(impOpEx)
-                .impTrib(impTrib)
-                .impIVA(impIVA)
-                .monedaId(monedaId)
-                .monedaCotiz(monedaCotiz)
-                .cuitEmisor(cuit)
-                .cae(cae)
-                .vencimientoCae(LocalDate.parse(caeVto, AFIP_DATE))
-                .resultado(resultado)
-                .observaciones(observaciones)
-                .build();
+            String mensajeError = !errores.isEmpty() ? errores : observaciones;
 
-        facturaRepository.save(nuevaFactura);
+            if (cae == null || "No encontrado".equals(cae) || cae.isEmpty()) {
+                log.error("AFIP rechazo la factura. Resultado: {}, Errores: {}, Observaciones: {}", resultado, errores, observaciones);
+                throw new RuntimeException("AFIP RECHAZO LA FACTURA: " + (mensajeError.isEmpty() ? "Sin detalle de error" : mensajeError));
+            }
 
-        if ("R".equals(resultado)) {
-            throw new RuntimeException("Factura RECHAZADA por AFIP: " + observaciones);
-        }
+            if ("R".equals(resultado)) {
+                log.error("Factura RECHAZADA por AFIP. CAE: {}, Errores: {}", cae, mensajeError);
+                throw new RuntimeException("Factura RECHAZADA por AFIP: " + mensajeError);
+            }
 
-        String tipoComprobanteLabel = obtenerTipoComprobanteLabel(tipoCbte);
+            Factura nuevaFactura = Factura.builder()
+                    .puntoVenta(ptoVenta)
+                    .tipoComprobante(tipoCbte)
+                    .nroComprobante(proximoNro)
+                    .tipoDocumento(docTipo)
+                    .numeroDocumento(docNro)
+                    .nombreCliente(datos.getNombreCliente())
+                    .condicionIvaReceptorId(condIva)
+                    .concepto(concepto)
+                    .fechaEmision(fechaEmision)
+                    .fechaServicioDesde(datos.getFechaServicioDesde())
+                    .fechaServicioHasta(datos.getFechaServicioHasta())
+                    .fechaVencimientoPago(datos.getFechaVencimientoPago())
+                    .impTotal(impTotal)
+                    .impTotConc(impTotConc)
+                    .impNeto(impNeto)
+                    .impOpEx(impOpEx)
+                    .impTrib(impTrib)
+                    .impIVA(impIVA)
+                    .monedaId(monedaId)
+                    .monedaCotiz(monedaCotiz)
+                    .cuitEmisor(cuit)
+                    .cae(cae)
+                    .vencimientoCae(LocalDate.parse(caeVto, AFIP_DATE))
+                    .resultado(resultado)
+                    .observaciones(observaciones)
+                    .build();
 
-        return Map.of(
-                "estado", "APROBADA",
-                "cae", cae,
-                "vencimiento_cae", caeVto,
-                "tipo_comprobante", tipoComprobanteLabel,
-                "punto_venta", ptoVenta,
-                "numero_comprobante", proximoNro,
-                "cuit_emisor", cuit,
-                "imp_total", impTotal.toString(),
-                "resultado", resultado
-        );
+            facturaRepository.save(nuevaFactura);
+
+            String tipoComprobanteLabel = obtenerTipoComprobanteLabel(tipoCbte);
+
+            return Map.of(
+                    "estado", "APROBADA",
+                    "cae", cae,
+                    "vencimiento_cae", caeVto,
+                    "tipo_comprobante", tipoComprobanteLabel,
+                    "punto_venta", ptoVenta,
+                    "numero_comprobante", proximoNro,
+                    "cuit_emisor", cuit,
+                    "imp_total", impTotal.toString(),
+                    "resultado", resultado
+            );
         }
     }
 
@@ -265,6 +282,10 @@ public class AfipFacturacionService {
             xml.append(buildIvaXml(impIVA, impNeto, items));
         }
 
+        if (impTrib.compareTo(BigDecimal.ZERO) > 0) {
+            xml.append(buildTributosXml(impTrib));
+        }
+
         if (fechaServDesde != null && !fechaServDesde.isEmpty()) {
             xml.append("<ar:FchServDesde>").append(fechaServDesde).append("</ar:FchServDesde>");
         }
@@ -303,28 +324,66 @@ public class AfipFacturacionService {
 
     private String extraerEtiqueta(String xml, String tagName) {
         Matcher m = Pattern.compile("<" + tagName + ">(.*?)</" + tagName + ">", Pattern.DOTALL).matcher(xml);
-        if (m.find()) return m.group(1);
+        if (m.find()) {
+            String value = m.group(1).trim();
+            return value.isEmpty() ? "No encontrado" : value;
+        }
         return "No encontrado";
     }
 
     private String extraerObservaciones(String xml) {
         StringBuilder obs = new StringBuilder();
-
-        // Parsear Observaciones del detalle de comprobante
-        Matcher mObs = Pattern.compile("<Observacion>.*?<Code>(.*?)</Code>.*?<Msg>(.*?)</Msg>.*?</Observacion>", Pattern.DOTALL).matcher(xml);
+        Matcher mObs = Pattern.compile("<Obs>.*?<Code>(.*?)</Code>.*?<Msg>(.*?)</Msg>.*?</Obs>", Pattern.DOTALL).matcher(xml);
         while (mObs.find()) {
             if (!obs.isEmpty()) obs.append("; ");
             obs.append("[").append(mObs.group(1)).append("] ").append(mObs.group(2));
         }
+        return obs.toString();
+    }
 
-        // Parsear Errores generales del resultado
+    private String extraerErrores(String xml) {
+        StringBuilder errs = new StringBuilder();
         Matcher mErr = Pattern.compile("<Err>.*?<Code>(.*?)</Code>.*?<Msg>(.*?)</Msg>.*?</Err>", Pattern.DOTALL).matcher(xml);
         while (mErr.find()) {
-            if (!obs.isEmpty()) obs.append("; ");
-            obs.append("[ERROR ").append(mErr.group(1)).append("] ").append(mErr.group(2));
+            if (!errs.isEmpty()) errs.append("; ");
+            errs.append("[ERROR ").append(mErr.group(1)).append("] ").append(mErr.group(2));
+        }
+        return errs.toString();
+    }
+
+    private String buildTributosXml(BigDecimal impTrib) {
+        StringBuilder xml = new StringBuilder();
+        xml.append("<ar:Tributo>");
+        xml.append("<ar:Id>99</ar:Id>");
+        xml.append("<ar:Desc>Tributo</ar:Desc>");
+        xml.append("<ar:BaseImp>").append(formatDecimal(impTrib)).append("</ar:BaseImp>");
+        xml.append("<ar:Alicuota>0</ar:Alicuota>");
+        xml.append("<ar:Importe>").append(formatDecimal(impTrib)).append("</ar:Importe>");
+        xml.append("</ar:Tributo>");
+        return xml.toString();
+    }
+
+    private String buildIvaXml(BigDecimal impIVA, BigDecimal impNeto, List<FacturaDto.ItemDto> items) {
+        StringBuilder xml = new StringBuilder();
+        xml.append("<ar:Iva>");
+
+        Integer alicuotaId = resolveAlicuotaIdFromItems(items);
+        if (alicuotaId == null && impNeto.compareTo(BigDecimal.ZERO) > 0) {
+            BigDecimal tasa = impIVA.multiply(BigDecimal.valueOf(100)).divide(impNeto, 2, java.math.RoundingMode.HALF_UP);
+            alicuotaId = resolveAlicuotaId(tasa);
+        }
+        if (alicuotaId == null) {
+            alicuotaId = 5; // Default 21%
         }
 
-        return obs.toString();
+        xml.append("<ar:AlicIva>");
+        xml.append("<ar:Id>").append(alicuotaId).append("</ar:Id>");
+        xml.append("<ar:BaseImp>").append(formatDecimal(impNeto)).append("</ar:BaseImp>");
+        xml.append("<ar:Importe>").append(formatDecimal(impIVA)).append("</ar:Importe>");
+        xml.append("</ar:AlicIva>");
+
+        xml.append("</ar:Iva>");
+        return xml.toString();
     }
 
     private String resolveWsfeUrl(TenantAfipConfig tenantConfig) {
@@ -357,29 +416,6 @@ public class AfipFacturacionService {
         };
     }
 
-    private String buildIvaXml(BigDecimal impIVA, BigDecimal impNeto, List<FacturaDto.ItemDto> items) {
-        StringBuilder xml = new StringBuilder();
-        xml.append("<ar:Iva>");
-
-        Integer alicuotaId = resolveAlicuotaIdFromItems(items);
-        if (alicuotaId == null && impNeto.compareTo(BigDecimal.ZERO) > 0) {
-            BigDecimal tasa = impIVA.multiply(BigDecimal.valueOf(100)).divide(impNeto, 2, java.math.RoundingMode.HALF_UP);
-            alicuotaId = resolveAlicuotaId(tasa);
-        }
-        if (alicuotaId == null) {
-            alicuotaId = 5; // Default 21%
-        }
-
-        xml.append("<ar:AlicIva>");
-        xml.append("<ar:Id>").append(alicuotaId).append("</ar:Id>");
-        xml.append("<ar:BaseImp>").append(formatDecimal(impNeto)).append("</ar:BaseImp>");
-        xml.append("<ar:Importe>").append(formatDecimal(impIVA)).append("</ar:Importe>");
-        xml.append("</ar:AlicIva>");
-
-        xml.append("</ar:Iva>");
-        return xml.toString();
-    }
-
     private Integer resolveAlicuotaIdFromItems(List<FacturaDto.ItemDto> items) {
         if (items == null || items.isEmpty()) return null;
         BigDecimal primeraTasa = null;
@@ -389,7 +425,6 @@ public class AfipFacturacionService {
                 if (primeraTasa == null) {
                     primeraTasa = tasa;
                 } else if (primeraTasa.subtract(tasa).abs().compareTo(BigDecimal.valueOf(0.5)) > 0) {
-                    // Hay múltiples tasas diferentes - simplificamos usando la primera
                     break;
                 }
             }
@@ -416,8 +451,8 @@ public class AfipFacturacionService {
         if (diferencia.compareTo(BigDecimal.valueOf(0.05)) > 0) {
             throw new IllegalArgumentException(
                     "Los importes no son consistentes. impTotal=" + impTotal +
-                    " pero impNeto+impIVA+impTrib+impOpEx+impTotConc=" + sumaComponentes +
-                    " (diferencia=" + diferencia + ")"
+                            " pero impNeto+impIVA+impTrib+impOpEx+impTotConc=" + sumaComponentes +
+                            " (diferencia=" + diferencia + ")"
             );
         }
     }
@@ -427,13 +462,13 @@ public class AfipFacturacionService {
             if (fechaServDesde.isEmpty() || fechaServHasta.isEmpty()) {
                 throw new IllegalArgumentException(
                         "Para concepto " + concepto + " (Servicios / Productos y Servicios), " +
-                        "las fechas de servicio desde y hasta son obligatorias."
+                                "las fechas de servicio desde y hasta son obligatorias."
                 );
             }
             if (fechaVtoPago.isEmpty()) {
                 throw new IllegalArgumentException(
                         "Para concepto " + concepto + " (Servicios / Productos y Servicios), " +
-                        "la fecha de vencimiento de pago es obligatoria."
+                                "la fecha de vencimiento de pago es obligatoria."
                 );
             }
         }

@@ -16,4 +16,8 @@ public class EmitirRequest {
     private Integer condicionIvaReceptorId;
     private String monedaId;
     private BigDecimal monedaCotiz;
+    private BigDecimal impIVA;
+    private BigDecimal impTrib;
+    private BigDecimal impOpEx;
+    private BigDecimal impTotConc;
 }

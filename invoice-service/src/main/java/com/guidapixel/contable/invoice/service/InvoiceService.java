@@ -48,7 +48,7 @@ public class InvoiceService {
                 .puntoVenta(request.getPuntoVenta())
                 .build();
 
-        BigDecimal totalFactura = BigDecimal.ZERO;
+        BigDecimal subtotalItems = BigDecimal.ZERO;
 
         for (var itemReq : request.getItems()) {
             BigDecimal subtotal = itemReq.getCantidad().multiply(itemReq.getPrecioUnitario());
@@ -61,9 +61,15 @@ public class InvoiceService {
                     .build();
 
             invoice.addItem(item);
-            totalFactura = totalFactura.add(subtotal);
+            subtotalItems = subtotalItems.add(subtotal);
         }
 
+        BigDecimal impIVA = request.getImpIVA() != null ? request.getImpIVA() : BigDecimal.ZERO;
+        BigDecimal impTrib = request.getImpTrib() != null ? request.getImpTrib() : BigDecimal.ZERO;
+        BigDecimal impOpEx = request.getImpOpEx() != null ? request.getImpOpEx() : BigDecimal.ZERO;
+        BigDecimal impTotConc = request.getImpTotConc() != null ? request.getImpTotConc() : BigDecimal.ZERO;
+
+        BigDecimal totalFactura = subtotalItems.add(impIVA).add(impTrib).add(impOpEx).add(impTotConc);
         invoice.setTotal(totalFactura);
 
         if (request.isEmitirAfip()) {
@@ -96,6 +102,8 @@ public class InvoiceService {
         BigDecimal impTotal = invoice.getTotal();
         BigDecimal impNeto = impTotal.subtract(impIVA).subtract(impTrib).subtract(impOpEx).subtract(impTotConc);
         if (impNeto.compareTo(BigDecimal.ZERO) < 0) {
+            log.warn("impNeto calculado es negativo ({}), se ajusta a 0. impTotal={}, impIVA={}, impTrib={}, impOpEx={}, impTotConc={}",
+                    impNeto, impTotal, impIVA, impTrib, impOpEx, impTotConc);
             impNeto = BigDecimal.ZERO;
         }
 
@@ -220,6 +228,10 @@ public class InvoiceService {
         invoiceRequest.setCondicionIvaReceptorId(request.getCondicionIvaReceptorId());
         invoiceRequest.setMonedaId(request.getMonedaId());
         invoiceRequest.setMonedaCotiz(request.getMonedaCotiz());
+        invoiceRequest.setImpIVA(request.getImpIVA());
+        invoiceRequest.setImpTrib(request.getImpTrib());
+        invoiceRequest.setImpOpEx(request.getImpOpEx());
+        invoiceRequest.setImpTotConc(request.getImpTotConc());
 
         emitirEnAfip(invoice, invoiceRequest);
         sendInvoiceEmail(invoice, invoiceRequest, tenantId);
