@@ -232,6 +232,9 @@ public class InvoiceService {
         invoiceRequest.setImpTrib(request.getImpTrib());
         invoiceRequest.setImpOpEx(request.getImpOpEx());
         invoiceRequest.setImpTotConc(request.getImpTotConc());
+        invoiceRequest.setFechaServicioDesde(request.getFechaServicioDesde());
+        invoiceRequest.setFechaServicioHasta(request.getFechaServicioHasta());
+        invoiceRequest.setFechaVencimientoPago(request.getFechaVencimientoPago());
 
         emitirEnAfip(invoice, invoiceRequest);
         sendInvoiceEmail(invoice, invoiceRequest, tenantId);

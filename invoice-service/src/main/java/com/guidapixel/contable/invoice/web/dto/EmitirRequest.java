@@ -3,6 +3,7 @@ package com.guidapixel.contable.invoice.web.dto;
 import lombok.Data;
 
 import java.math.BigDecimal;
+import java.time.LocalDate;
 
 @Data
 public class EmitirRequest {
@@ -20,4 +21,7 @@ public class EmitirRequest {
     private BigDecimal impTrib;
     private BigDecimal impOpEx;
     private BigDecimal impTotConc;
+    private LocalDate fechaServicioDesde;
+    private LocalDate fechaServicioHasta;
+    private LocalDate fechaVencimientoPago;
 }
