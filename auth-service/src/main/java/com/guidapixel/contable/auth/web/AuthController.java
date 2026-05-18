@@ -13,6 +13,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @RestController
@@ -21,6 +22,13 @@ import java.util.Map;
 public class AuthController {
 
     private final AuthService service;
+
+    private Map<String, Object> errorResponse(Exception e) {
+        Map<String, Object> body = new HashMap<>();
+        body.put("status", "ERROR");
+        body.put("error", e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName());
+        return body;
+    }
 
     @PostMapping("/login")
     public ResponseEntity<AuthenticationResponse> authenticate(@RequestBody AuthenticationRequest request) {
@@ -45,16 +53,19 @@ public class AuthController {
             }
             return ResponseEntity.ok(service.changePassword(auth.getName(), request.getCurrentPassword(), request.getNewPassword()));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", e.getMessage()));
+            return ResponseEntity.badRequest().body(errorResponse(e));
         }
     }
 
     @PostMapping("/forgot-password")
     public ResponseEntity<?> forgotPassword(@RequestBody ForgotPasswordRequest request) {
         try {
+            if (request.getEmail() == null || request.getEmail().isBlank()) {
+                return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", "El email es obligatorio"));
+            }
             return ResponseEntity.ok(service.forgotPassword(request.getEmail()));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", e.getMessage()));
+            return ResponseEntity.badRequest().body(errorResponse(e));
         }
     }
 
@@ -63,7 +74,7 @@ public class AuthController {
         try {
             return ResponseEntity.ok(service.resetPassword(request.getToken(), request.getNewPassword()));
         } catch (Exception e) {
-            return ResponseEntity.badRequest().body(Map.of("status", "ERROR", "error", e.getMessage()));
+            return ResponseEntity.badRequest().body(errorResponse(e));
         }
     }
 }
