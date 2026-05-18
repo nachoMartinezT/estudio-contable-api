@@ -98,8 +98,8 @@ public class AuthService {
                 new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
         );
 
-        var user = userRepository.findByEmail(request.getEmail())
-                .orElseThrow();
+        var user = userRepository.findByEmailAndActivoTrue(request.getEmail())
+                .orElseThrow(() -> new RuntimeException("Usuario no encontrado o inactivo"));
 
         List<String> permissions = null;
         if (user.getRole() == Role.STAFF) {
@@ -114,7 +114,7 @@ public class AuthService {
     }
 
     public com.guidapixel.contable.auth.web.dto.UserProfileResponse getUserProfile(String email) {
-        var user = userRepository.findByEmail(email)
+        var user = userRepository.findByEmailAndActivoTrue(email)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
         var tenant = tenantRepository.findById(user.getTenantId())
@@ -134,7 +134,7 @@ public class AuthService {
 
     @Transactional
     public Map<String, Object> changePassword(String email, String currentPassword, String newPassword) {
-        User user = userRepository.findByEmail(email)
+        User user = userRepository.findByEmailAndActivoTrue(email)
                 .orElseThrow(() -> new RuntimeException("Usuario no encontrado"));
 
         if (!passwordEncoder.matches(currentPassword, user.getPassword())) {
@@ -153,7 +153,7 @@ public class AuthService {
 
     @Transactional
     public Map<String, Object> forgotPassword(String email) {
-        User user = userRepository.findByEmail(email)
+        User user = userRepository.findByEmailAndActivoTrue(email)
                 .orElseThrow(() -> new RuntimeException("No existe un usuario con ese email"));
 
         String token = generateResetToken();

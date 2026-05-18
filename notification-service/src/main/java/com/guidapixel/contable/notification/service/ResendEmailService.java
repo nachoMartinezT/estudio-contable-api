@@ -464,4 +464,43 @@ public class ResendEmailService {
             </html>
             """.formatted(nombreAdmin, nombreEstudio, listaClientes, totalVencido);
     }
+
+    public String buildResetPassword(Map<String, String> vars) {
+        String nombreUsuario = vars.getOrDefault("nombreUsuario", "Usuario");
+        String resetUrl = vars.getOrDefault("resetUrl", "https://app.guidapixel.com/reset-password");
+        String expiracion = vars.getOrDefault("expiracion", "24 horas");
+
+        return """
+            <!DOCTYPE html>
+            <html>
+            <head><meta charset="UTF-8"></head>
+            <body style="margin:0;padding:0;font-family:Arial,sans-serif;background-color:#f4f4f4;">
+                <table width="100%%" cellpadding="0" cellspacing="0" style="background-color:#f4f4f4;padding:20px 0;">
+                    <tr><td align="center">
+                        <table width="600" cellpadding="0" cellspacing="0" style="background-color:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 2px 4px rgba(0,0,0,0.1);">
+                            <tr><td style="background-color:#1e40af;padding:24px;text-align:center;">
+                                <h1 style="color:#ffffff;margin:0;font-size:22px;">Recuperar contrasena</h1>
+                            </td></tr>
+                            <tr><td style="padding:32px 24px;color:#333333;font-size:15px;line-height:1.6;">
+                                <p>Hola <strong>%s</strong>,</p>
+                                <p>Recibimos una solicitud para restablecer tu contrasena. Hace clic en el siguiente boton para crear una nueva:</p>
+                                <table width="100%%" cellpadding="0" cellspacing="0" style="margin:24px 0;">
+                                    <tr><td align="center">
+                                        <a href="%s" style="background-color:#1e40af;color:#ffffff;padding:12px 32px;text-decoration:none;border-radius:6px;font-weight:bold;font-size:15px;">Restablecer contrasena</a>
+                                    </td></tr>
+                                </table>
+                                <p style="color:#64748b;font-size:13px;">Este enlace expira en %s. Si no solicitaste este cambio, podes ignorar este email.</p>
+                                <p style="color:#64748b;font-size:13px;margin-top:16px;">Si el boton no funciona, copia y pega este enlace en tu navegador:</p>
+                                <p style="color:#1e40af;font-size:12px;word-break:break-all;">%s</p>
+                            </td></tr>
+                            <tr><td style="background-color:#f8fafc;padding:16px;text-align:center;color:#94a3b8;font-size:12px;border-top:1px solid #e2e8f0;">
+                                Powered by Guida Contable | guidapixel.com
+                            </td></tr>
+                        </table>
+                    </td></tr>
+                </table>
+            </body>
+            </html>
+            """.formatted(nombreUsuario, resetUrl, expiracion, resetUrl);
+    }
 }

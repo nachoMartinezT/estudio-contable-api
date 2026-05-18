@@ -61,7 +61,7 @@ public class AdminService {
         return tenantRepository.findByActivo(activo).stream()
                 .map(t -> {
                     Map<String, Object> map = tenantToMap(t);
-                    userRepository.findByTenantId(t.getId()).stream()
+                    userRepository.findByTenantIdAndActivoTrue(t.getId()).stream()
                             .filter(u -> u.getRole() == Role.ADMIN)
                             .findFirst()
                             .ifPresent(admin -> map.put("adminUserId", admin.getId()));
@@ -162,7 +162,7 @@ public class AdminService {
 
     public Map<String, Object> getDashboardStats() {
         long totalTenants = tenantRepository.count();
-        long totalUsers = userRepository.count();
+        long totalUsers = userRepository.countByActivoTrue();
         List<Subscription> allSubscriptions = subscriptionRepository.findAll();
         long activeSubscriptions = allSubscriptions.stream().filter(Subscription::isActive).count();
 
@@ -198,11 +198,14 @@ public class AdminService {
         if (existingUser.isPresent()) {
             User u = existingUser.get();
             var userTenant = u.getTenantId() != null ? tenantRepository.findById(u.getTenantId()).orElse(null) : null;
-            if (userTenant != null && userTenant.isActivo()) {
+            if (userTenant != null && userTenant.isActivo() && u.isActivo()) {
                 throw new RuntimeException("Ya existe un usuario activo con ese email");
             }
-            // Eliminar usuario huerfano o de tenant inactivo
-            userRepository.delete(u);
+            // Renombrar email del usuario viejo para liberar constraint unique
+            String orphanEmail = "orphan_" + System.currentTimeMillis() + "_" + u.getId() + "@deleted.local";
+            u.setEmail(orphanEmail);
+            u.setActivo(false);
+            userRepository.save(u);
         }
 
         Tenant tenant = Tenant.builder()
@@ -255,6 +258,9 @@ public class AdminService {
             User user = existingUser.get();
             if (!tenantId.equals(user.getTenantId())) {
                 throw new RuntimeException("Ya existe un usuario con ese email en otro tenant");
+            }
+            if (!user.isActivo()) {
+                user.setActivo(true);
             }
             if (request.getRole() == Role.CLIENT) {
                 user.setNombre(request.getNombre());
@@ -322,6 +328,12 @@ public class AdminService {
                 .orElseThrow(() -> new RuntimeException("Tenant no encontrado"));
         tenant.setActivo(false);
         tenantRepository.save(tenant);
+
+        List<User> users = userRepository.findByTenantId(tenantId);
+        for (User user : users) {
+            user.setActivo(false);
+        }
+        userRepository.saveAll(users);
     }
 
     @Transactional
@@ -342,6 +354,12 @@ public class AdminService {
 
         try {
             List<User> users = userRepository.findByTenantId(tenantId);
+            // Renombrar emails antes de borrar para evitar constraint violations
+            for (User user : users) {
+                user.setEmail("purged_" + System.currentTimeMillis() + "_" + user.getId() + "@deleted.local");
+            }
+            userRepository.saveAll(users);
+
             for (User user : users) {
                 try {
                     staffPermissionsRepository.findByStaffUserIdAndTenantId(user.getId(), tenantId)
@@ -657,8 +675,8 @@ public class AdminService {
     }
 
     public List<Map<String, Object>> getStaffUsers(Long tenantId) {
-        return userRepository.findAll().stream()
-                .filter(u -> u.getTenantId().equals(tenantId) && u.getRole() == Role.STAFF)
+        return userRepository.findByTenantIdAndActivoTrue(tenantId).stream()
+                .filter(u -> u.getRole() == Role.STAFF)
                 .map(u -> Map.<String, Object>of(
                         "id", u.getId(),
                         "nombre", u.getNombre(),

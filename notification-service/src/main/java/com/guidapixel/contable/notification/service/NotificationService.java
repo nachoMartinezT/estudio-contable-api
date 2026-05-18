@@ -63,6 +63,10 @@ public class NotificationService {
                 subject = "Resumen semanal de deuda vencida - " + request.getTenantName();
                 htmlContent = emailService.buildResumenDeudaVencida(request.getVariables());
             }
+            case "RESET_PASSWORD" -> {
+                subject = "Recuperar contrasena - " + request.getTenantName();
+                htmlContent = emailService.buildResetPassword(request.getVariables());
+            }
             default -> throw new IllegalArgumentException("Template desconocido: " + request.getTemplateType());
         }
 
