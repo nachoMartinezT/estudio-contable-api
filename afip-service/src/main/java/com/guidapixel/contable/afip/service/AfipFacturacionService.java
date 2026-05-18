@@ -278,14 +278,6 @@ public class AfipFacturacionService {
         xml.append("<ar:MonCotiz>").append(formatDecimal(monedaCotiz)).append("</ar:MonCotiz>");
         xml.append("<ar:CondicionIVAReceptorId>").append(condIvaReceptorId).append("</ar:CondicionIVAReceptorId>");
 
-        if (impIVA.compareTo(BigDecimal.ZERO) > 0) {
-            xml.append(buildIvaXml(impIVA, impNeto, items));
-        }
-
-        if (impTrib.compareTo(BigDecimal.ZERO) > 0) {
-            xml.append(buildTributosXml(impTrib));
-        }
-
         if (fechaServDesde != null && !fechaServDesde.isEmpty()) {
             xml.append("<ar:FchServDesde>").append(fechaServDesde).append("</ar:FchServDesde>");
         }

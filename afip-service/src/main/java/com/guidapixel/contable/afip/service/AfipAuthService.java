@@ -112,11 +112,11 @@ public class AfipAuthService {
     private String invokeWsaa(byte[] signedCms, TenantAfipConfig tenantConfig) throws Exception {
         String cmsBase64 = Base64.getEncoder().encodeToString(signedCms);
 
-        String soapXml = "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:ser=\"http://wsaa.view.sua.dirstra.afip.gov.ar\">" +
+        String soapXml = "<soapenv:Envelope xmlns:soapenv=\"http://schemas.xmlsoap.org/soap/envelope/\" xmlns:ser=\"http://wsaa.view.sua.dirstra.afip.gov.ar/LoginCms\">" +
                 "<soapenv:Header/>" +
                 "<soapenv:Body>" +
                 "<ser:loginCms>" +
-                "<ser:in0>" + cmsBase64 + "</ser:in0>" +
+                "<in0>" + cmsBase64 + "</in0>" +
                 "</ser:loginCms>" +
                 "</soapenv:Body>" +
                 "</soapenv:Envelope>";
